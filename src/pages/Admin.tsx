@@ -3,8 +3,10 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { LogOut } from 'lucide-react';
 import PricingSettingsForm from '@/components/admin/PricingSettingsForm';
 import UserManagement from '@/components/admin/UserManagement';
 import RideHistory from '@/components/admin/RideHistory';
@@ -12,7 +14,7 @@ import EarningsHistory from '@/components/admin/EarningsHistory';
 import WithdrawalManagement from '@/components/admin/WithdrawalManagement';
 
 const Admin = () => {
-  const { profile, loading } = useAuth();
+  const { profile, loading, signOut } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -35,11 +37,26 @@ const Admin = () => {
     return null;
   }
 
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/', { replace: true });
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="text-center">
-        <h1 className="text-3xl font-bold text-primary">Painel Administrativo</h1>
-        <p className="text-muted-foreground">Gerencie preços, usuários, corridas e saques</p>
+      <div className="flex justify-between items-start mb-6">
+        <div className="text-center flex-1">
+          <h1 className="text-3xl font-bold text-primary">Painel Administrativo</h1>
+          <p className="text-muted-foreground">Gerencie preços, usuários, corridas e saques</p>
+        </div>
+        <Button 
+          variant="outline" 
+          onClick={handleLogout}
+          className="flex items-center gap-2"
+        >
+          <LogOut className="w-4 h-4" />
+          Sair
+        </Button>
       </div>
 
       <Card className="shadow-ride-card border-0">
