@@ -1,0 +1,243 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design System - RideBuddy */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 158 64% 52%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 158 64% 52%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 48 96% 53%;
+    --warning-foreground: 222.2 84% 4.9%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 158 64% 52%;
+
+    --radius: 0.75rem;
+
+    /* RideBuddy Brand Colors */
+    --ride-primary: 158 64% 52%;
+    --ride-primary-dark: 158 64% 45%;
+    --ride-secondary: 220 13% 18%;
+    --ride-accent: 47 97% 64%;
+    --ride-gray: 220 13% 91%;
+    --ride-dark: 220 13% 9%;
+    
+    /* Gradients */
+    --ride-gradient-primary: linear-gradient(135deg, hsl(158 64% 52%) 0%, hsl(158 64% 45%) 100%);
+    --ride-gradient-hero: linear-gradient(135deg, hsl(158 64% 52%) 0%, hsl(47 97% 64%) 100%);
+    --ride-gradient-card: linear-gradient(135deg, hsl(0 0% 100%) 0%, hsl(220 13% 98%) 100%);
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 158 64% 52%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 158 64% 52%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 158 64% 52%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-muted/30;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-primary/50 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-primary/70;
+  }
+}
+
+@layer utilities {
+  /* Brand Utilities */
+  .bg-ride-primary {
+    background-color: hsl(var(--ride-primary));
+  }
+
+  .bg-ride-gradient {
+    background: var(--ride-gradient-primary);
+  }
+
+  .bg-ride-hero {
+    background: var(--ride-gradient-hero);
+  }
+
+  .text-ride-primary {
+    color: hsl(var(--ride-primary));
+  }
+
+  /* Animations */
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+
+  .animate-pulse-subtle {
+    animation: pulseSubtle 2s infinite;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  @keyframes pulseSubtle {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  /* Map Container */
+  .map-container {
+    @apply w-full h-full rounded-lg overflow-hidden shadow-lg;
+  }
+
+  /* Glass Effect */
+  .glass-effect {
+    backdrop-filter: blur(12px);
+    background: rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  /* Card Hover Effects */
+  .card-hover {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  }
+
+  /* Status Indicators */
+  .status-pending {
+    @apply bg-yellow-100 text-yellow-800 border-yellow-300;
+  }
+
+  .status-accepted {
+    @apply bg-blue-100 text-blue-800 border-blue-300;
+  }
+
+  .status-in-progress {
+    @apply bg-green-100 text-green-800 border-green-300;
+  }
+
+  .status-completed {
+    @apply bg-gray-100 text-gray-800 border-gray-300;
+  }
+
+  .status-cancelled {
+    @apply bg-red-100 text-red-800 border-red-300;
+  }
+
+  /* PWA Optimizations */
+  @media (display-mode: standalone) {
+    body {
+      /* Remove margins when running as PWA */
+      margin: 0;
+      /* Prevent overscroll bounce */
+      overscroll-behavior: none;
+    }
+    
+    /* Safe area adjustments for devices with notches */
+    .safe-area-top {
+      padding-top: env(safe-area-inset-top);
+    }
+    
+    .safe-area-bottom {
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+  }
+
+  /* Touch-friendly styles */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .pull-to-refresh {
+    transform: translateY(var(--pull-distance, 0px));
+    transition: transform 0.2s ease-out;
+  }
+
+  /* Hide scrollbars in PWA mode */
+  @media (display-mode: standalone) {
+    ::-webkit-scrollbar {
+      display: none;
+    }
+    
+    * {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  }
+}
+
+/* Inter Font Import */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
