@@ -59,7 +59,7 @@ export const GoogleMap = ({ origin, destination, driverMarker, className = "w-fu
 
     const imgElement = document.createElement('img');
     imgElement.src = driverIconUrl;
-    imgElement.alt = 'Motorista';
+    imgElement.alt = 'Mototaxista';
     imgElement.style.cssText = `
       width: 32px;
       height: 32px;
@@ -168,7 +168,7 @@ export const GoogleMap = ({ origin, destination, driverMarker, className = "w-fu
         driverMarkerRef.current = new window.google.maps.marker.AdvancedMarkerElement({
           position: driverMarker.position,
           map: mapInstanceRef.current,
-          title: 'Motorista',
+          title: 'Mototaxista',
           content: buildDriverMarkerContent(driverMarker.heading || 0),
           zIndex: 1000,
         });
@@ -178,7 +178,7 @@ export const GoogleMap = ({ origin, destination, driverMarker, className = "w-fu
         driverMarkerRef.current = new window.google.maps.Marker({
           position: driverMarker.position,
           map: mapInstanceRef.current,
-          title: 'Motorista',
+          title: 'Mototaxista',
           icon: {
             url: driverIconUrl,
             scaledSize: new window.google.maps.Size(32, 32),
@@ -195,7 +195,7 @@ export const GoogleMap = ({ origin, destination, driverMarker, className = "w-fu
       driverMarkerRef.current = new window.google.maps.Marker({
         position: driverMarker.position,
         map: mapInstanceRef.current,
-        title: 'Motorista',
+        title: 'Mototaxista',
         icon: {
           url: driverIconUrl,
           scaledSize: new window.google.maps.Size(32, 32),
@@ -296,7 +296,9 @@ export const GoogleMap = ({ origin, destination, driverMarker, className = "w-fu
     }
   };
 
-  const loadGoogleMapsScript = async () => {
+  const loadGoogleMapsScript = async (retryCount = 0) => {
+    const maxRetries = 3;
+    
     if (window.google) {
       console.log('Google Maps já carregado, inicializando...');
       initializeMap();
@@ -304,7 +306,7 @@ export const GoogleMap = ({ origin, destination, driverMarker, className = "w-fu
     }
 
     try {
-      console.log('Carregando chave API do Google Maps...');
+      console.log(`Tentativa ${retryCount + 1}/${maxRetries + 1} - Carregando chave API do Google Maps...`);
       const { data, error } = await supabase.functions.invoke('get-google-maps-key');
       
       if (error) {
@@ -320,26 +322,43 @@ export const GoogleMap = ({ origin, destination, driverMarker, className = "w-fu
       console.log('Chave API obtida, carregando script do Google Maps...');
 
       const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${data.key}&libraries=geometry,places,marker`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${data.key}&libraries=geometry,places,marker&callback=initGoogleMaps`;
       script.async = true;
       script.defer = true;
       
-      script.onload = () => {
+      // Create a global callback for when the script loads
+      window.initGoogleMaps = () => {
         console.log('Script do Google Maps carregado com sucesso');
         initializeMap();
       };
       
       script.onerror = (err) => {
         console.error('Falha ao carregar script do Google Maps:', err);
-        setError('Falha ao carregar o Google Maps. Verifique sua conexão com a internet e a validade da chave API.');
-        setIsLoading(false);
+        
+        if (retryCount < maxRetries) {
+          console.log(`Tentando novamente em 2 segundos... (tentativa ${retryCount + 2})`);
+          setTimeout(() => {
+            loadGoogleMapsScript(retryCount + 1);
+          }, 2000);
+        } else {
+          setError('Falha ao carregar o Google Maps. Verifique sua conexão com a internet e a validade da chave API.');
+          setIsLoading(false);
+        }
       };
       
       document.head.appendChild(script);
     } catch (err: any) {
       console.error('Erro no carregamento do Google Maps:', err);
-      setError(`Erro ao carregar o Google Maps: ${err.message}`);
-      setIsLoading(false);
+      
+      if (retryCount < maxRetries) {
+        console.log(`Tentando novamente em 2 segundos... (tentativa ${retryCount + 2})`);
+        setTimeout(() => {
+          loadGoogleMapsScript(retryCount + 1);
+        }, 2000);
+      } else {
+        setError(`Erro ao carregar o Google Maps: ${err.message}`);
+        setIsLoading(false);
+      }
     }
   };
 
@@ -370,7 +389,11 @@ export const GoogleMap = ({ origin, destination, driverMarker, className = "w-fu
         <p className="text-destructive text-center mb-2 font-medium">Erro no Google Maps</p>
         <p className="text-muted-foreground text-sm text-center">{error}</p>
         <button 
-          onClick={loadGoogleMapsScript} 
+          onClick={() => {
+            setError(null);
+            setIsLoading(true);
+            loadGoogleMapsScript(0);
+          }} 
           className="mt-3 px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 text-sm"
         >
           Tentar novamente

@@ -19,10 +19,35 @@ export interface PlacePrediction {
   secondary_text: string;
 }
 
-const getGoogleMapsApiKey = async (): Promise<string> => {
-  const { data, error } = await supabase.functions.invoke('get-google-maps-key');
-  if (error) throw new Error('Failed to get Google Maps API key');
-  return data.key;
+const getGoogleMapsApiKey = async (retryCount = 0): Promise<string> => {
+  const maxRetries = 3;
+  
+  try {
+    console.log(`🔑 Buscando chave API (tentativa ${retryCount + 1})`);
+    const { data, error } = await supabase.functions.invoke('get-google-maps-key');
+    
+    if (error) {
+      console.error('🔑 Erro ao buscar chave:', error);
+      throw new Error(`Failed to get Google Maps API key: ${error.message}`);
+    }
+    
+    if (!data?.key) {
+      throw new Error('API key not returned by server');
+    }
+    
+    console.log('🔑 ✅ Chave API obtida com sucesso');
+    return data.key;
+  } catch (error) {
+    console.error('🔑 ❌ Erro:', error);
+    
+    if (retryCount < maxRetries) {
+      console.log(`🔑 Tentando novamente em 1 segundo... (${retryCount + 1}/${maxRetries})`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return getGoogleMapsApiKey(retryCount + 1);
+    }
+    
+    throw error;
+  }
 };
 
 export const geocodeAddress = async (address: string): Promise<LocationCoords> => {
@@ -58,36 +83,95 @@ export const reverseGeocode = async (lat: number, lng: number): Promise<string> 
 
 export const calculateRoute = async (
   origin: LocationCoords,
-  destination: LocationCoords
+  destination: LocationCoords,
+  retryCount = 0
 ): Promise<RouteDetails> => {
-  const { data, error } = await supabase.functions.invoke('calculate-route', {
-    body: { origin, destination }
-  });
+  const maxRetries = 2;
   
-  if (error) throw new Error('Unable to calculate route');
-  return data;
+  try {
+    console.log('🗺️ Calculando rota via Supabase Edge Function...');
+    const { data, error } = await supabase.functions.invoke('calculate-route', {
+      body: { origin, destination }
+    });
+    
+    if (error) {
+      console.error('🗺️ Erro na edge function:', error);
+      throw new Error(`Unable to calculate route: ${error.message}`);
+    }
+    
+    console.log('🗺️ ✅ Rota calculada com sucesso');
+    return data;
+  } catch (error) {
+    console.error('🗺️ ❌ Erro no cálculo de rota:', error);
+    
+    if (retryCount < maxRetries) {
+      console.log(`🗺️ Tentando novamente... (${retryCount + 1}/${maxRetries})`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return calculateRoute(origin, destination, retryCount + 1);
+    }
+    
+    throw error;
+  }
 };
 
-export const getPlacePredictions = async (input: string): Promise<PlacePrediction[]> => {
+export const getPlacePredictions = async (input: string, retryCount = 0): Promise<PlacePrediction[]> => {
   if (input.length < 3) return [];
   
-  const { data, error } = await supabase.functions.invoke('places-autocomplete', {
-    body: { input }
-  });
+  const maxRetries = 2;
   
-  if (error) {
-    console.error('Error getting place predictions:', error);
+  try {
+    console.log(`🏢 Buscando sugestões para: "${input}"`);
+    const { data, error } = await supabase.functions.invoke('places-autocomplete', {
+      body: { input }
+    });
+    
+    if (error) {
+      console.error('🏢 Erro na edge function:', error);
+      throw new Error(`Error getting place predictions: ${error.message}`);
+    }
+    
+    const predictions = data?.predictions || [];
+    console.log(`🏢 ✅ ${predictions.length} sugestões encontradas`);
+    return predictions;
+  } catch (error) {
+    console.error('🏢 ❌ Erro ao buscar sugestões:', error);
+    
+    if (retryCount < maxRetries) {
+      console.log(`🏢 Tentando novamente... (${retryCount + 1}/${maxRetries})`);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      return getPlacePredictions(input, retryCount + 1);
+    }
+    
+    // Return empty array on final failure to prevent breaking the UI
     return [];
   }
-  
-  return data.predictions || [];
 };
 
-export const getPlaceDetails = async (placeId: string): Promise<LocationCoords> => {
-  const { data, error } = await supabase.functions.invoke('place-details', {
-    body: { placeId }
-  });
+export const getPlaceDetails = async (placeId: string, retryCount = 0): Promise<LocationCoords> => {
+  const maxRetries = 2;
   
-  if (error) throw new Error('Unable to get place details');
-  return data;
+  try {
+    console.log(`📍 Buscando detalhes do local: ${placeId}`);
+    const { data, error } = await supabase.functions.invoke('place-details', {
+      body: { placeId }
+    });
+    
+    if (error) {
+      console.error('📍 Erro na edge function:', error);
+      throw new Error(`Unable to get place details: ${error.message}`);
+    }
+    
+    console.log('📍 ✅ Detalhes do local obtidos');
+    return data;
+  } catch (error) {
+    console.error('📍 ❌ Erro ao buscar detalhes:', error);
+    
+    if (retryCount < maxRetries) {
+      console.log(`📍 Tentando novamente... (${retryCount + 1}/${maxRetries})`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return getPlaceDetails(placeId, retryCount + 1);
+    }
+    
+    throw error;
+  }
 };
