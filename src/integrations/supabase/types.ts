@@ -35,6 +35,39 @@ export type Database = {
         }
         Relationships: []
       }
+      chat_messages: {
+        Row: {
+          created_at: string
+          delivered_at: string | null
+          id: string
+          read_at: string | null
+          receiver_id: string
+          ride_id: string
+          sender_id: string
+          text: string
+        }
+        Insert: {
+          created_at?: string
+          delivered_at?: string | null
+          id?: string
+          read_at?: string | null
+          receiver_id: string
+          ride_id: string
+          sender_id: string
+          text: string
+        }
+        Update: {
+          created_at?: string
+          delivered_at?: string | null
+          id?: string
+          read_at?: string | null
+          receiver_id?: string
+          ride_id?: string
+          sender_id?: string
+          text?: string
+        }
+        Relationships: []
+      }
       driver_details: {
         Row: {
           created_at: string | null
@@ -71,6 +104,81 @@ export type Database = {
           vehicle_model?: string | null
           vehicle_plate?: string | null
           vehicle_type?: string | null
+        }
+        Relationships: []
+      }
+      driver_passenger_ratings: {
+        Row: {
+          comment: string | null
+          created_at: string | null
+          driver_id: string
+          id: string
+          passenger_id: string
+          rating: number
+          ride_id: string
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string | null
+          driver_id: string
+          id?: string
+          passenger_id: string
+          rating: number
+          ride_id: string
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string | null
+          driver_id?: string
+          id?: string
+          passenger_id?: string
+          rating?: number
+          ride_id?: string
+        }
+        Relationships: []
+      }
+      driver_payout_requests: {
+        Row: {
+          admin_notes: string | null
+          amount: number
+          created_at: string | null
+          driver_id: string
+          id: string
+          notes: string | null
+          payment_details: Json | null
+          payment_method: string
+          processed_at: string | null
+          processed_by: string | null
+          status: Database["public"]["Enums"]["payout_status"] | null
+          updated_at: string | null
+        }
+        Insert: {
+          admin_notes?: string | null
+          amount: number
+          created_at?: string | null
+          driver_id: string
+          id?: string
+          notes?: string | null
+          payment_details?: Json | null
+          payment_method: string
+          processed_at?: string | null
+          processed_by?: string | null
+          status?: Database["public"]["Enums"]["payout_status"] | null
+          updated_at?: string | null
+        }
+        Update: {
+          admin_notes?: string | null
+          amount?: number
+          created_at?: string | null
+          driver_id?: string
+          id?: string
+          notes?: string | null
+          payment_details?: Json | null
+          payment_method?: string
+          processed_at?: string | null
+          processed_by?: string | null
+          status?: Database["public"]["Enums"]["payout_status"] | null
+          updated_at?: string | null
         }
         Relationships: []
       }
@@ -176,6 +284,36 @@ export type Database = {
           phone?: string | null
           updated_at?: string | null
           user_type?: string
+        }
+        Relationships: []
+      }
+      ride_ratings: {
+        Row: {
+          comment: string | null
+          created_at: string | null
+          driver_id: string
+          id: string
+          passenger_id: string
+          rating: number
+          ride_id: string
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string | null
+          driver_id: string
+          id?: string
+          passenger_id: string
+          rating: number
+          ride_id: string
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string | null
+          driver_id?: string
+          id?: string
+          passenger_id?: string
+          rating?: number
+          ride_id?: string
         }
         Relationships: []
       }
