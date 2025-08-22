@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Car, User, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Bike, User, AlertCircle, ArrowLeft } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { UserType } from '@/types';
@@ -91,7 +91,7 @@ export const AuthForm = ({
         <div className="text-center mb-8">
           
           <h1 className="text-3xl font-bold text-primary mb-2">Viaja+</h1>
-          <p className="text-muted-foreground">Conectando passageiros e motoristas</p>
+          <p className="text-muted-foreground">Conectando passageiros e mototaxistas</p>
         </div>
 
         <Card className="shadow-ride-card border-0">
@@ -167,8 +167,8 @@ export const AuthForm = ({
                         </SelectItem>
                         <SelectItem value="driver">
                           <div className="flex items-center space-x-2">
-                            <Car className="w-4 h-4" />
-                            <span>Motorista</span>
+                            <Bike className="w-4 h-4" />
+                            <span>Mototaxista</span>
                           </div>
                         </SelectItem>
                       </SelectContent>

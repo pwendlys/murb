@@ -1,11 +1,11 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
-import { Map, Car, DollarSign, Star, User } from "lucide-react";
+import { Map, Bike, DollarSign, Star, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
   { to: "/driver/map", label: "Mapa", icon: Map },
-  { to: "/driver/rides", label: "Corridas", icon: Car },
+  { to: "/driver/rides", label: "Corridas", icon: Bike },
   { to: "/driver/earnings", label: "Ganhos", icon: DollarSign },
   { to: "/driver/reviews", label: "Avaliações", icon: Star },
   { to: "/profile", label: "Perfil", icon: User },
@@ -21,7 +21,7 @@ export const DriverBottomNavigation: React.FC = () => {
   return (
     <nav
       className="fixed bottom-0 inset-x-0 z-50 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
-      aria-label="Navegação inferior do motorista"
+      aria-label="Navegação inferior do mototaxista"
     >
       <ul className="grid grid-cols-5">
         {items.map(({ to, label, icon: Icon }) => (

@@ -84,7 +84,7 @@ export const DriverRidesPage = () => {
     
     const metaDescription = document.querySelector('meta[name="description"]');
     if (metaDescription) {
-      metaDescription.setAttribute('content', 'Visualize o histórico completo das suas corridas realizadas como motorista.');
+      metaDescription.setAttribute('content', 'Visualize o histórico completo das suas corridas realizadas como mototaxista.');
     }
 
     const canonicalLink = document.querySelector('link[rel="canonical"]');

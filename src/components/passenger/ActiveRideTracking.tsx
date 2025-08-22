@@ -59,15 +59,15 @@ export const ActiveRideTracking: React.FC<ActiveRideTrackingProps> = ({ ride, on
 
   const getStatusText = (status: string) => {
     if (status === 'accepted') {
-      return 'Motorista a caminho';
+      return 'Mototaxista a caminho';
     }
     if (status === 'in_progress') {
       if (ride.driver_arrived) {
-        return 'Motorista chegou';
+        return 'Mototaxista chegou';
       }
       return 'Corrida em andamento';
     }
-    return 'Aguardando motorista';
+    return 'Aguardando mototaxista';
   };
 
   const getStatusVariant = (status: string) => {
@@ -295,7 +295,7 @@ export const ActiveRideTracking: React.FC<ActiveRideTrackingProps> = ({ ride, on
                       className="w-full h-8 text-xs border-primary/30 hover:bg-primary/5"
                     >
                       <Map className="w-3 h-3 mr-2" />
-                      Rastrear Motorista
+                      Rastrear Mototaxista
                     </Button>
                   </div>
                 )}
@@ -311,7 +311,7 @@ export const ActiveRideTracking: React.FC<ActiveRideTrackingProps> = ({ ride, on
           isOpen={trackingDialogOpen}
           onClose={() => setTrackingDialogOpen(false)}
           driverId={ride.driver_id!}
-          driverName={ride.profiles?.full_name || 'Motorista'}
+          driverName={ride.profiles?.full_name || 'Mototaxista'}
           pickupLocation={{
             lat: ride.origin_lat,
             lng: ride.origin_lng

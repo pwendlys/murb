@@ -10,11 +10,11 @@ export const DriverEarningsPage = () => {
 
   // SEO Meta tags
   useEffect(() => {
-    document.title = 'Ganhos - RideBuddy Driver';
+    document.title = 'Ganhos - RideBuddy Mototaxista';
     
     const metaDescription = document.querySelector('meta[name="description"]');
     if (metaDescription) {
-      metaDescription.setAttribute('content', 'Gerencie seus ganhos, visualize saldo disponível e solicite saques como motorista.');
+      metaDescription.setAttribute('content', 'Gerencie seus ganhos, visualize saldo disponível e solicite saques como mototaxista.');
     }
 
     const canonicalLink = document.querySelector('link[rel="canonical"]');

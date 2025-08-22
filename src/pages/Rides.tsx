@@ -56,7 +56,7 @@ const RidesPage = () => {
     
     const metaDescription = document.querySelector('meta[name="description"]');
     if (metaDescription) {
-      metaDescription.setAttribute('content', 'Acompanhe o histórico das suas corridas, avalie motoristas e gerencie suas viagens.');
+      metaDescription.setAttribute('content', 'Acompanhe o histórico das suas corridas, avalie mototaxistas e gerencie suas viagens.');
     }
 
     const canonicalLink = document.querySelector('link[rel="canonical"]') as HTMLLinkElement;
@@ -150,7 +150,7 @@ const RidesPage = () => {
     }
 
     if (ride.status === 'accepted' || ride.status === 'in_progress') {
-      toast.error('Não é possível cancelar: o motorista já aceitou a corrida e está a caminho!', {
+      toast.error('Não é possível cancelar: o mototaxista já aceitou a corrida e está a caminho!', {
         style: {
           backgroundColor: '#dc2626',
           color: 'white',
@@ -192,7 +192,7 @@ const RidesPage = () => {
         if (ride && ride.status === 'completed' && ride.profiles) {
           setSelectedRideForRating(ride);
           setRateDialogOpen(true);
-          toast.info('Sua corrida foi finalizada! Avalie o motorista.');
+          toast.info('Sua corrida foi finalizada! Avalie o mototaxista.');
         }
       }
     } catch (error) {
@@ -237,10 +237,10 @@ const RidesPage = () => {
         if (ride?.driver_en_route === false) {
           return 'Corrida Em Andamento';
         }
-        return 'Motorista Chegou';
+        return 'Mototaxista Chegou';
       }
       if (ride?.driver_en_route === true) {
-        return 'Motorista Indo Até Você';
+        return 'Mototaxista Indo Até Você';
       }
       return 'Em andamento';
     }
@@ -345,14 +345,14 @@ const RidesPage = () => {
                         <Avatar className="h-10 w-10">
                           <AvatarImage 
                             src={ride.profiles?.avatar_url || undefined} 
-                            alt={ride.profiles?.full_name || 'Motorista'} 
+                            alt={ride.profiles?.full_name || 'Mototaxista'} 
                           />
                           <AvatarFallback className="bg-primary/10 text-primary font-medium">
                             {ride.profiles?.full_name ? ride.profiles.full_name.split(' ').map(n => n[0]).join('').toUpperCase() : 'M'}
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex-1">
-                          <p className="font-medium text-sm">Motorista</p>
+                          <p className="font-medium text-sm">Mototaxista</p>
                           <p className="text-sm text-muted-foreground">{ride.profiles?.full_name}</p>
                         </div>
                       </div>
@@ -402,7 +402,7 @@ const RidesPage = () => {
                             className="flex items-center gap-2"
                           >
                             <Star className="w-3 h-3" />
-                            Avaliar Motorista
+                            Avaliar Mototaxista
                           </Button>
                         </div>
                       )}

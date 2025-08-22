@@ -18,7 +18,7 @@ export const LandingPage = () => {
     {
       icon: Shield,
       title: "Segurança",
-      description: "Motoristas verificados e viagens monitoradas"
+      description: "Mototaxistas verificados e viagens monitoradas"
     },
     {
       icon: Star,
@@ -35,7 +35,7 @@ export const LandingPage = () => {
   ];
 
   const driverSteps = [
-    { step: "1", text: "Cadastre-se como motorista" },
+    { step: "1", text: "Cadastre-se como mototaxista" },
     { step: "2", text: "Receba solicitações" },
     { step: "3", text: "Atenda passageiros" },
     { step: "4", text: "Ganhe dinheiro" }
@@ -67,7 +67,7 @@ export const LandingPage = () => {
             </h1>
             <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl mx-auto animate-fade-in">
               Conectamos você ao transporte rápido e seguro que precisa. 
-              Seja passageiro ou motorista, faça parte da nossa comunidade.
+              Seja passageiro ou mototaxista, faça parte da nossa comunidade.
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center animate-slide-up">
@@ -156,7 +156,7 @@ export const LandingPage = () => {
             {/* Motoristas */}
             <div>
               <h3 className="text-2xl font-bold text-foreground mb-8 text-center">
-                Para Motoristas
+                Para Mototaxistas
               </h3>
               <div className="space-y-6">
                 {driverSteps.map((step, index) => (
@@ -198,7 +198,7 @@ export const LandingPage = () => {
                 variant="outline"
                 className="w-full sm:w-auto px-8 py-6 text-lg font-semibold border-primary-foreground text-primary-foreground hover:bg-primary-foreground hover:text-primary"
               >
-                Começar como Motorista
+                Começar como Mototaxista
               </Button>
             </Link>
           </div>

@@ -171,7 +171,7 @@ export const PassengerDashboard = () => {
 
     // Se a corrida foi aceita ou está em andamento, mostrar alerta vermelho
     if (ride.status === 'accepted' || ride.status === 'in_progress') {
-      toast.error('Não é possível cancelar: o motorista já aceitou a corrida e está a caminho!', {
+      toast.error('Não é possível cancelar: o mototaxista já aceitou a corrida e está a caminho!', {
         style: {
           backgroundColor: '#dc2626',
           color: 'white',
@@ -213,7 +213,7 @@ export const PassengerDashboard = () => {
         if (ride && ride.status === 'completed' && ride.profiles) {
           setSelectedRideForRating(ride);
           setRateDialogOpen(true);
-          toast.info('Sua corrida foi finalizada! Avalie o motorista.');
+          toast.info('Sua corrida foi finalizada! Avalie o mototaxista.');
         }
       }
     } catch (error) {
@@ -255,14 +255,14 @@ export const PassengerDashboard = () => {
     }
     if (status === 'in_progress') {
       if (ride?.driver_arrived) {
-        // Se o motorista chegou mas driver_en_route é false, significa que clicou em "Ir Agora"
+        // Se o mototaxista chegou mas driver_en_route é false, significa que clicou em "Ir Agora"
         if (ride?.driver_en_route === false) {
           return 'Corrida Em Andamento';
         }
-        return 'Motorista Chegou';
+        return 'Mototaxista Chegou';
       }
       if (ride?.driver_en_route === true) {
-        return 'Motorista Indo Até Você';
+        return 'Mototaxista Indo Até Você';
       }
       return 'Em andamento';
     }
@@ -408,14 +408,14 @@ export const PassengerDashboard = () => {
                           <Avatar className="h-10 w-10">
                             <AvatarImage 
                               src={ride.profiles?.avatar_url || undefined} 
-                              alt={ride.profiles?.full_name || 'Motorista'} 
+                              alt={ride.profiles?.full_name || 'Mototaxista'} 
                             />
                             <AvatarFallback className="bg-primary/10 text-primary font-medium">
                               {ride.profiles?.full_name ? ride.profiles.full_name.split(' ').map(n => n[0]).join('').toUpperCase() : 'M'}
                             </AvatarFallback>
                           </Avatar>
                           <div className="flex-1">
-                            <p className="font-medium text-sm">Motorista</p>
+                            <p className="font-medium text-sm">Mototaxista</p>
                             <p className="text-sm text-muted-foreground">{ride.profiles?.full_name}</p>
                           </div>
                         </div>
@@ -431,7 +431,7 @@ export const PassengerDashboard = () => {
                         {ride.profiles && (
                           <div className="flex items-center gap-2 text-primary">
                             <Car className="w-3 h-3" />
-                            <span>Motorista: {ride.profiles.full_name}</span>
+                            <span>Mototaxista: {ride.profiles.full_name}</span>
                           </div>
                         )}
 
@@ -462,7 +462,7 @@ export const PassengerDashboard = () => {
                               className="w-full flex items-center gap-2"
                             >
                               <Star className="w-4 h-4" />
-                              Avaliar Motorista
+                              Avaliar Mototaxista
                             </Button>
                           </div>
                         )}

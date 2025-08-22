@@ -156,7 +156,7 @@ export const RideCard = ({ ride, type, onUpdate }: RideCardProps) => {
     } catch (error: any) {
       console.error('Error accepting ride:', error);
       if (error.message?.includes('No rows updated')) {
-        toast.error('Esta corrida já foi aceita por outro motorista');
+        toast.error('Esta corrida já foi aceita por outro mototaxista');
       } else {
         toast.error('Erro ao aceitar corrida');
       }
@@ -351,7 +351,7 @@ export const RideCard = ({ ride, type, onUpdate }: RideCardProps) => {
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <p className="font-medium text-sm">Passageiro</p>
-                    {/* Chat Button para motoristas */}
+                    {/* Chat Button para mototaxistas */}
                     {shouldEnableChat && user && (
                       <ChatButton
                         unreadCount={unreadCount}
@@ -563,7 +563,7 @@ export const RideCard = ({ ride, type, onUpdate }: RideCardProps) => {
         </CardContent>
       </Card>
 
-      {/* Chat Dialog para motoristas */}
+      {/* Chat Dialog para mototaxistas */}
       {shouldEnableChat && user && ride.profiles && (
         <ChatDialog
           isOpen={chatDialogOpen}

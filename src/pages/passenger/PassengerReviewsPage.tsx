@@ -12,7 +12,7 @@ export const PassengerReviewsPage: React.FC = () => {
     document.title = "Minhas Avaliações - EcoRide";
     const metaDescription = document.querySelector('meta[name="description"]');
     if (metaDescription) {
-      metaDescription.setAttribute("content", "Veja as avaliações que você recebeu dos motoristas no EcoRide");
+      metaDescription.setAttribute("content", "Veja as avaliações que você recebeu dos mototaxistas no EcoRide");
     }
   }, []);
 
@@ -37,7 +37,7 @@ export const PassengerReviewsPage: React.FC = () => {
       <header className="bg-card border-b px-4 py-4">
         <h1 className="text-2xl font-bold">Minhas Avaliações</h1>
         <p className="text-muted-foreground">
-          Veja as avaliações que você recebeu dos motoristas
+          Veja as avaliações que você recebeu dos mototaxistas
         </p>
       </header>
 

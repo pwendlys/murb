@@ -128,7 +128,7 @@ export const DriverDashboard = () => {
     <div className="space-y-6 animate-fade-in">
       <div className="text-center">
         <div className="flex items-center justify-center gap-4 mb-2">
-          <h1 className="text-3xl font-bold text-primary">Painel do Motorista</h1>
+          <h1 className="text-3xl font-bold text-primary">Painel do Mototaxista</h1>
           <RideNotifications />
         </div>
         <p className="text-muted-foreground">Aceite corridas, gerencie trajetos e acompanhe seus ganhos</p>

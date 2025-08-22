@@ -10,7 +10,7 @@ export const DriverReviewsPage = () => {
 
   // SEO Meta tags
   useEffect(() => {
-    document.title = 'Avaliações - RideBuddy Driver';
+    document.title = 'Avaliações - RideBuddy Mototaxista';
     
     const metaDescription = document.querySelector('meta[name="description"]');
     if (metaDescription) {

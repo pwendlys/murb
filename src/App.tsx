@@ -56,7 +56,7 @@ const App = () => (
           </Routes>
         </BrowserRouter>
 
-        {/* Gate global para fluxo de motorista (não altera rotas/UX existentes) */}
+        {/* Gate global para fluxo de mototaxista (não altera rotas/UX existentes) */}
         <DriverOnboardingGate />
         
         {/* PWA Components */}

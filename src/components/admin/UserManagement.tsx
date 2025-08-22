@@ -140,7 +140,7 @@ const UserManagement = () => {
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
                 <SelectItem value="passenger">Passageiros</SelectItem>
-                <SelectItem value="driver">Motoristas</SelectItem>
+                <SelectItem value="driver">Mototaxistas</SelectItem>
                 <SelectItem value="admin">Administradores</SelectItem>
               </SelectContent>
             </Select>
@@ -183,7 +183,7 @@ const UserManagement = () => {
                             <div><strong>Cor:</strong> {u.driver_details.vehicle_color} | <strong>Tipo:</strong> {u.driver_details.vehicle_type === 'car' ? 'Carro' : 'Moto'}</div>
                           </div>
                         ) : (
-                          <span className="italic text-orange-600">⚠️ Aguardando dados do motorista</span>
+                          <span className="italic text-orange-600">⚠️ Aguardando dados do mototaxista</span>
                         )}
                       </div>
                     )}

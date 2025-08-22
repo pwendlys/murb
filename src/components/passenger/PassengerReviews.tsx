@@ -139,7 +139,7 @@ export const PassengerReviews: React.FC = () => {
               <Star className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-lg font-semibold mb-2">Nenhuma avaliação ainda</h3>
               <p className="text-muted-foreground">
-                Você ainda não recebeu avaliações de motoristas.
+                Você ainda não recebeu avaliações de mototaxistas.
               </p>
             </CardContent>
           </Card>
@@ -150,7 +150,7 @@ export const PassengerReviews: React.FC = () => {
                 <div className="flex items-start justify-between">
                   <div>
                     <CardTitle className="text-lg">
-                      {rating.rides?.profiles?.full_name || "Motorista"}
+                      {rating.rides?.profiles?.full_name || "Mototaxista"}
                     </CardTitle>
                     <p className="text-sm text-muted-foreground">
                       {format(new Date(rating.created_at), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}

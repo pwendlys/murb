@@ -51,7 +51,7 @@ const Profile = () => {
             {profile.user_type === 'driver' && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Dados do Motorista e Veículo</CardTitle>
+                  <CardTitle>Dados do Mototaxista e Veículo</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <DriverDetailsForm 

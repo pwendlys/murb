@@ -182,7 +182,7 @@ const WithdrawalManagement = () => {
     <div className="space-y-6">
       <div className="text-center">
         <h2 className="text-2xl font-bold text-primary">Gerenciar Saques</h2>
-        <p className="text-muted-foreground">Analise e processe solicitações de saque dos motoristas</p>
+        <p className="text-muted-foreground">Analise e processe solicitações de saque dos mototaxistas</p>
       </div>
 
       <Card>
@@ -205,7 +205,7 @@ const WithdrawalManagement = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Motorista</TableHead>
+                  <TableHead>Mototaxista</TableHead>
                   <TableHead>Valor</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Método</TableHead>
@@ -277,7 +277,7 @@ const WithdrawalManagement = () => {
                                 <form onSubmit={form.handleSubmit(handleUpdateRequest)} className="space-y-4">
                                   <div className="space-y-3">
                                     <div className="text-foreground">
-                                      <p className="text-foreground"><strong>Motorista:</strong> {selectedRequest.profiles?.full_name}</p>
+                                      <p className="text-foreground"><strong>Mototaxista:</strong> {selectedRequest.profiles?.full_name}</p>
                                       <p className="text-foreground"><strong>Método:</strong> {selectedRequest.payment_method}</p>
                                     </div>
 
@@ -318,7 +318,7 @@ const WithdrawalManagement = () => {
 
                                     {selectedRequest.notes && (
                                       <div className="text-foreground">
-                                        <strong>Observações do motorista:</strong>
+                                        <strong>Observações do mototaxista:</strong>
                                         <p className="text-sm text-muted-foreground mt-1">{selectedRequest.notes}</p>
                                       </div>
                                     )}

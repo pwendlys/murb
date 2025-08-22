@@ -60,7 +60,7 @@ const EarningsHistory = () => {
 
     if (error) {
       console.error('Error loading drivers:', error);
-      toast.error('Erro ao carregar motoristas');
+      toast.error('Erro ao carregar mototaxistas');
     } else {
       setDrivers(data || []);
     }
@@ -186,7 +186,7 @@ const EarningsHistory = () => {
   summary.averageEarnings = summary.totalRides > 0 ? summary.totalEarnings / summary.totalRides : 0;
 
   const exportToCSV = () => {
-    const headers = ['Data', 'Motorista', 'Passageiro', 'Origem', 'Destino', 'Distância (km)', 'Ganhos (R$)'];
+    const headers = ['Data', 'Mototaxista', 'Passageiro', 'Origem', 'Destino', 'Distância (km)', 'Ganhos (R$)'];
     const csvContent = [
       headers.join(','),
       ...filteredRides.map(ride => [
@@ -219,10 +219,10 @@ const EarningsHistory = () => {
         <div className="grid md:grid-cols-4 gap-4">
           <Select value={selectedDriver} onValueChange={setSelectedDriver}>
             <SelectTrigger>
-              <SelectValue placeholder="Todos os motoristas" />
+              <SelectValue placeholder="Todos os mototaxistas" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos os motoristas</SelectItem>
+              <SelectItem value="all">Todos os mototaxistas</SelectItem>
               {drivers.map((driver) => (
                 <SelectItem key={driver.id} value={driver.id}>
                   {driver.full_name}
@@ -337,7 +337,7 @@ const EarningsHistory = () => {
                   </div>
                   <div className="text-sm">
                     <div className="font-medium text-green-600">
-                      Motorista: {ride.driver_profile?.full_name || 'N/A'}
+                      Mototaxista: {ride.driver_profile?.full_name || 'N/A'}
                     </div>
                     <div className="font-medium text-blue-600">
                       Passageiro: {ride.passenger_profile?.full_name || 'N/A'}

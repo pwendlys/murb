@@ -139,7 +139,7 @@ const RideHistory = () => {
             <Input 
               value={search} 
               onChange={(e) => setSearch(e.target.value)} 
-              placeholder="Buscar por endereço, nome do passageiro, motorista ou ID (mín. 2 caracteres)" 
+              placeholder="Buscar por endereço, nome do passageiro, mototaxista ou ID (mín. 2 caracteres)" 
             />
           </div>
         </div>
@@ -161,9 +161,9 @@ const RideHistory = () => {
                   <div className="font-medium text-blue-600">
                     Passageiro: {r.passenger_profile?.full_name || 'N/A'}
                   </div>
-                  <div className="font-medium text-green-600">
-                    Motorista: {r.driver_profile?.full_name || 'Não atribuído'}
-                  </div>
+                   <div className="font-medium text-green-600">
+                     Mototaxista: {r.driver_profile?.full_name || 'Não atribuído'}
+                   </div>
                 </div>
                 <div className="text-sm">
                   <div>Dist.: {r.estimated_distance ? `${r.estimated_distance} km` : '-'}</div>

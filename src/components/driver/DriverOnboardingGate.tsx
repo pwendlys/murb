@@ -163,7 +163,7 @@ if (!mounted) return;
 
   const handleSubmitted = async () => {
     setHasDetails(true);
-    toast.success("Dados do motorista enviados. Aguarde aprovação do administrador.");
+    toast.success("Dados do mototaxista enviados. Aguarde aprovação do administrador.");
     // Recarregar perfil para refletir is_active atual (provavelmente continua false até admin aprovar)
     if (userId) {
       const { data: prof, error } = await supabase
@@ -194,12 +194,12 @@ if (!mounted) return;
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>
-            {awaitingApproval ? "Conta de motorista aguardando aprovação" : "Complete seu cadastro de motorista"}
+            {awaitingApproval ? "Conta de mototaxista aguardando aprovação" : "Complete seu cadastro de mototaxista"}
           </DialogTitle>
           <DialogDescription>
             {awaitingApproval
-              ? "Recebemos seus dados. Um administrador precisa aprovar sua conta de motorista antes de você começar a dirigir."
-              : "Informe seus dados de motorista para concluir o cadastro."}
+              ? "Recebemos seus dados. Um administrador precisa aprovar sua conta de mototaxista antes de você começar a dirigir."
+              : "Informe seus dados de mototaxista para concluir o cadastro."}
           </DialogDescription>
         </DialogHeader>
 

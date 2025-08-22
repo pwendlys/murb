@@ -74,7 +74,7 @@ export const RateDriverDialog = ({ ride, open, onOpenChange, onSubmitted }: Rate
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Avaliar Motorista</DialogTitle>
+          <DialogTitle>Avaliar Mototaxista</DialogTitle>
           <DialogDescription>
             Como foi sua experiência com {ride.profiles.full_name}?
           </DialogDescription>

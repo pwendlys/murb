@@ -29,7 +29,7 @@ const emptyDetails: Omit<DriverDetails, "user_id"> = {
   vehicle_model: "",
   vehicle_plate: "",
   vehicle_color: "",
-  vehicle_type: "car",
+  vehicle_type: "moto",
 };
 
 export default function DriverDetailsForm({ userId, onSubmitted }: DriverDetailsFormProps) {
@@ -58,7 +58,7 @@ export default function DriverDetailsForm({ userId, onSubmitted }: DriverDetails
           vehicle_model: data.vehicle_model ?? "",
           vehicle_plate: data.vehicle_plate ?? "",
           vehicle_color: data.vehicle_color ?? "",
-          vehicle_type: (data.vehicle_type as "car" | "moto") ?? "car",
+          vehicle_type: (data.vehicle_type as "car" | "moto") ?? "moto",
         });
       }
     };
@@ -87,7 +87,7 @@ export default function DriverDetailsForm({ userId, onSubmitted }: DriverDetails
     // Se houve um erro diferente de "não encontrado", aborta
     if (fetchErr && fetchErr.code && fetchErr.code !== "PGRST116") {
       console.error("Erro buscando driver_details:", fetchErr);
-      toast.error("Erro ao salvar dados do motorista");
+      toast.error("Erro ao salvar dados do mototaxista");
       setSaving(false);
       return;
     }
@@ -107,7 +107,7 @@ export default function DriverDetailsForm({ userId, onSubmitted }: DriverDetails
 
       if (error) {
         console.error("Erro atualizando driver_details:", error);
-        toast.error("Falha ao atualizar dados do motorista");
+        toast.error("Falha ao atualizar dados do mototaxista");
         setSaving(false);
         return;
       }
@@ -124,13 +124,13 @@ export default function DriverDetailsForm({ userId, onSubmitted }: DriverDetails
 
       if (error) {
         console.error("Erro inserindo driver_details:", error);
-        toast.error("Falha ao salvar dados do motorista");
+        toast.error("Falha ao salvar dados do mototaxista");
         setSaving(false);
         return;
       }
     }
 
-    toast.success("Dados do motorista salvos");
+    toast.success("Dados do mototaxista salvos");
     setSaving(false);
     onSubmitted?.();
   };

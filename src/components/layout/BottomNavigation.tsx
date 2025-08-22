@@ -1,11 +1,11 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
-import { Car, Map as MapIcon, User, Star } from "lucide-react";
+import { Bike, Map as MapIcon, User, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
   { to: "/map", label: "Mapa", icon: MapIcon },
-  { to: "/rides", label: "Corridas", icon: Car },
+  { to: "/rides", label: "Corridas", icon: Bike },
   { to: "/reviews", label: "Avaliações", icon: Star },
   { to: "/profile", label: "Perfil", icon: User },
 ];

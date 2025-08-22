@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Car, User, LogOut, Menu, X, UserCircle } from 'lucide-react';
+import { Bike, User, LogOut, Menu, X, UserCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 
@@ -20,11 +20,11 @@ export const Header = () => {
   };
 
   const getUserTypeIcon = () => {
-    return profile?.user_type === 'driver' ? <Car className="w-4 h-4" /> : <User className="w-4 h-4" />;
+    return profile?.user_type === 'driver' ? <Bike className="w-4 h-4" /> : <User className="w-4 h-4" />;
   };
 
   const getUserTypeBadge = () => {
-    return profile?.user_type === 'driver' ? 'Motorista' : 'Passageiro';
+    return profile?.user_type === 'driver' ? 'Mototaxista' : 'Passageiro';
   };
 
   return (

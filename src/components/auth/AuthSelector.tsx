@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Car, Shield, Users } from 'lucide-react';
+import { Bike, Shield, Users } from 'lucide-react';
 import { AuthForm } from './AuthForm';
 import { AdminAuth } from './AdminAuth';
 
@@ -22,7 +22,7 @@ export const AuthSelector = () => {
       <div className="w-full max-w-md animate-fade-in">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-primary rounded-2xl mb-4">
-            <Car className="w-8 h-8 text-primary-foreground" />
+            <Bike className="w-8 h-8 text-primary-foreground" />
           </div>
           <h1 className="text-3xl font-bold text-primary mb-2">RideBuddy</h1>
           <p className="text-muted-foreground">Conectando passageiros e motoristas</p>
@@ -46,7 +46,7 @@ export const AuthSelector = () => {
               </div>
               <div className="text-left">
                 <div className="font-semibold">Usuário</div>
-                <div className="text-sm text-muted-foreground">Passageiro ou Motorista</div>
+                <div className="text-sm text-muted-foreground">Passageiro ou Mototaxista</div>
               </div>
             </Button>
 
