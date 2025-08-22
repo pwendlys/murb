@@ -14,7 +14,132 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      admin_setup: {
+        Row: {
+          admin_user_id: string
+          created_at: string | null
+          password_set: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          admin_user_id: string
+          created_at?: string | null
+          password_set?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          admin_user_id?: string
+          created_at?: string | null
+          password_set?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      locations: {
+        Row: {
+          heading: number | null
+          id: string
+          lat: number
+          lng: number
+          speed: number | null
+          timestamp: string | null
+          user_id: string
+        }
+        Insert: {
+          heading?: number | null
+          id?: string
+          lat: number
+          lng: number
+          speed?: number | null
+          timestamp?: string | null
+          user_id: string
+        }
+        Update: {
+          heading?: number | null
+          id?: string
+          lat?: number
+          lng?: number
+          speed?: number | null
+          timestamp?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      pricing_settings: {
+        Row: {
+          created_at: string | null
+          fixed_price: number | null
+          fixed_price_active: boolean | null
+          id: string
+          price_per_km: number | null
+          price_per_km_active: boolean | null
+          service_fee_type: string | null
+          service_fee_value: number | null
+          singleton: boolean | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          fixed_price?: number | null
+          fixed_price_active?: boolean | null
+          id?: string
+          price_per_km?: number | null
+          price_per_km_active?: boolean | null
+          service_fee_type?: string | null
+          service_fee_value?: number | null
+          singleton?: boolean | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          fixed_price?: number | null
+          fixed_price_active?: boolean | null
+          id?: string
+          price_per_km?: number | null
+          price_per_km_active?: boolean | null
+          service_fee_type?: string | null
+          service_fee_value?: number | null
+          singleton?: boolean | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string | null
+          full_name: string
+          id: string
+          is_active: boolean | null
+          phone: string | null
+          updated_at: string | null
+          user_type: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string | null
+          full_name: string
+          id: string
+          is_active?: boolean | null
+          phone?: string | null
+          updated_at?: string | null
+          user_type: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string | null
+          full_name?: string
+          id?: string
+          is_active?: boolean | null
+          phone?: string | null
+          updated_at?: string | null
+          user_type?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
