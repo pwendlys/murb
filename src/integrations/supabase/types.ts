@@ -35,6 +35,45 @@ export type Database = {
         }
         Relationships: []
       }
+      driver_details: {
+        Row: {
+          created_at: string | null
+          driver_license: string | null
+          id: string
+          updated_at: string | null
+          user_id: string
+          vehicle_brand: string | null
+          vehicle_color: string | null
+          vehicle_model: string | null
+          vehicle_plate: string | null
+          vehicle_type: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          driver_license?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id: string
+          vehicle_brand?: string | null
+          vehicle_color?: string | null
+          vehicle_model?: string | null
+          vehicle_plate?: string | null
+          vehicle_type?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          driver_license?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id?: string
+          vehicle_brand?: string | null
+          vehicle_color?: string | null
+          vehicle_model?: string | null
+          vehicle_plate?: string | null
+          vehicle_type?: string | null
+        }
+        Relationships: []
+      }
       locations: {
         Row: {
           heading: number | null
@@ -137,6 +176,90 @@ export type Database = {
           phone?: string | null
           updated_at?: string | null
           user_type?: string
+        }
+        Relationships: []
+      }
+      rides: {
+        Row: {
+          actual_price: number | null
+          completed_at: string | null
+          created_at: string | null
+          destination_address: string
+          destination_lat: number
+          destination_lng: number
+          driver_arrived: boolean | null
+          driver_en_route: boolean | null
+          driver_id: string | null
+          driver_to_pickup_distance_km: number | null
+          driver_to_pickup_duration_min: number | null
+          en_route_started_at: string | null
+          estimated_distance: number | null
+          estimated_duration: number | null
+          estimated_price: number | null
+          id: string
+          origin_address: string
+          origin_lat: number
+          origin_lng: number
+          passenger_id: string
+          payment_method: string | null
+          pickup_arrived_at: string | null
+          started_at: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          actual_price?: number | null
+          completed_at?: string | null
+          created_at?: string | null
+          destination_address: string
+          destination_lat: number
+          destination_lng: number
+          driver_arrived?: boolean | null
+          driver_en_route?: boolean | null
+          driver_id?: string | null
+          driver_to_pickup_distance_km?: number | null
+          driver_to_pickup_duration_min?: number | null
+          en_route_started_at?: string | null
+          estimated_distance?: number | null
+          estimated_duration?: number | null
+          estimated_price?: number | null
+          id?: string
+          origin_address: string
+          origin_lat: number
+          origin_lng: number
+          passenger_id: string
+          payment_method?: string | null
+          pickup_arrived_at?: string | null
+          started_at?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          actual_price?: number | null
+          completed_at?: string | null
+          created_at?: string | null
+          destination_address?: string
+          destination_lat?: number
+          destination_lng?: number
+          driver_arrived?: boolean | null
+          driver_en_route?: boolean | null
+          driver_id?: string | null
+          driver_to_pickup_distance_km?: number | null
+          driver_to_pickup_duration_min?: number | null
+          en_route_started_at?: string | null
+          estimated_distance?: number | null
+          estimated_duration?: number | null
+          estimated_price?: number | null
+          id?: string
+          origin_address?: string
+          origin_lat?: number
+          origin_lng?: number
+          passenger_id?: string
+          payment_method?: string | null
+          pickup_arrived_at?: string | null
+          started_at?: string | null
+          status?: string | null
+          updated_at?: string | null
         }
         Relationships: []
       }
