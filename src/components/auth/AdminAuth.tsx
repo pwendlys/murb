@@ -25,22 +25,41 @@ export const AdminAuth = () => {
     try {
       console.log('Checking admin setup status...');
       
-      const { data, error } = await supabase
+      // Busca o registro mais recente com password_set = true
+      const { data: configuredAdmin, error: configuredError } = await supabase
         .from('admin_setup')
-        .select('password_set')
+        .select('password_set, admin_user_id')
+        .eq('password_set', true)
+        .order('updated_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
-      console.log('Admin setup check result:', { data, error });
+      console.log('Configured admin check:', { configuredAdmin, configuredError });
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error checking admin setup:', error);
-        setIsSetupMode(true);
-      } else if (data?.password_set) {
+      if (configuredAdmin?.password_set) {
         console.log('Admin already configured, showing login mode');
         setIsSetupMode(false);
+        return;
+      }
+
+      // Se não encontrou admin configurado, verifica se existe algum registro
+      const { data: anyAdmin, error: anyError } = await supabase
+        .from('admin_setup')
+        .select('password_set')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      console.log('Any admin check:', { anyAdmin, anyError });
+
+      if (anyError && anyError.code !== 'PGRST116') {
+        console.error('Error checking admin setup:', anyError);
+        setIsSetupMode(true);
+      } else if (anyAdmin) {
+        console.log('Admin exists but not configured, showing setup mode');
+        setIsSetupMode(true);
       } else {
-        console.log('Admin not configured, showing setup mode');
+        console.log('No admin found, showing setup mode');
         setIsSetupMode(true);
       }
     } catch (error) {
