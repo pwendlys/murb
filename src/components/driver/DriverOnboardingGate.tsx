@@ -2,11 +2,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import DriverDetailsForm from "./DriverDetailsForm";
 import { toast } from "sonner";
 import { Profile } from "@/types";
+import { useAuth } from "@/hooks/useAuth";
+import { LogOut } from "lucide-react";
 
 export default function DriverOnboardingGate() {
+  const { signOut } = useAuth();
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -178,6 +182,16 @@ if (!mounted) return;
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      toast.success("Logout realizado com sucesso");
+    } catch (error) {
+      console.error("Erro ao fazer logout:", error);
+      toast.error("Erro ao fazer logout");
+    }
+  };
+
   if (loading) return null;
 
   // Se não está aberto (não motorista ou já aprovado), não renderiza nada
@@ -208,8 +222,20 @@ if (!mounted) return;
         ) : null}
 
         {awaitingApproval ? (
-          <div className="rounded-md border p-4 text-sm">
-            Sua conta está pendente de aprovação. Assim que for aprovada, esta mensagem desaparecerá automaticamente.
+          <div className="space-y-4">
+            <div className="rounded-md border p-4 text-sm">
+              Sua conta está pendente de aprovação. Assim que for aprovada, esta mensagem desaparecerá automaticamente.
+            </div>
+            <div className="flex justify-end">
+              <Button 
+                variant="outline" 
+                onClick={handleLogout}
+                className="flex items-center gap-2"
+              >
+                <LogOut className="h-4 w-4" />
+                Sair da conta
+              </Button>
+            </div>
           </div>
         ) : null}
       </DialogContent>
