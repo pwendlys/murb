@@ -509,7 +509,7 @@ export type Database = {
         }
       }
       calculate_service_fee: {
-        Args: { p_driver_id: string; p_total_earnings: number }
+        Args: { p_available_balance: number; p_driver_id: string }
         Returns: number
       }
       cancel_fee: {
