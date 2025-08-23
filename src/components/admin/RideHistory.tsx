@@ -169,9 +169,18 @@ const RideHistory = () => {
                   <div>Dist.: {r.estimated_distance ? `${r.estimated_distance} km` : '-'}</div>
                   <div>Tempo: {r.estimated_duration ? `${r.estimated_duration} min` : '-'}</div>
                 </div>
-                <div className="text-sm">
-                  <div>Preço: {r.estimated_price !== null ? `R$ ${r.estimated_price.toFixed(2)}` : '-'}</div>
-                  <div>Status: {r.status}</div>
+                <div className="text-sm space-y-1">
+                  <div>Estimado: {r.estimated_price !== null ? `R$ ${r.estimated_price.toFixed(2)}` : '-'}</div>
+                  <div>Final: {r.actual_price !== null ? `R$ ${r.actual_price.toFixed(2)}` : 
+                    (r.status === 'completed' ? `R$ ${(r.estimated_price || 0).toFixed(2)}` : '-')}</div>
+                  <div className={`text-xs px-2 py-1 rounded ${
+                    r.status === 'completed' ? 'bg-green-100 text-green-800' :
+                    r.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                    r.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {r.status}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <Select value={r.status} onValueChange={(v) => updateRide(r.id, { status: v as RideStatus })}>

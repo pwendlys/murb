@@ -12,7 +12,7 @@ import UserManagement from '@/components/admin/UserManagement';
 import RideHistory from '@/components/admin/RideHistory';
 import EarningsHistory from '@/components/admin/EarningsHistory';
 import WithdrawalManagement from '@/components/admin/WithdrawalManagement';
-import { FeePaymentManagement } from '@/components/admin/fees/FeePaymentManagement';
+import { FeePaymentManagement } from '@/components/admin/FeePaymentManagement';
 
 const Admin = () => {
   const { profile, loading, signOut } = useAuth();

@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   requestFeePayment, 
   getMyBalances, 
@@ -38,6 +39,28 @@ export const DriverFeePayments = () => {
   useEffect(() => {
     if (user) {
       refreshData();
+      
+      // Subscribe to driver_balances changes for real-time updates
+      const subscription = supabase
+        .channel('driver_balance_changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'driver_balances',
+            filter: `driver_id=eq.${user.id}`
+          },
+          () => {
+            // Refresh data when balance changes
+            refreshData();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        subscription.unsubscribe();
+      };
     }
   }, [user]);
 
