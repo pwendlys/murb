@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Shield, AlertCircle } from 'lucide-react';
+import { Shield, AlertCircle, RefreshCw } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 
@@ -25,45 +25,54 @@ export const AdminAuth = () => {
     try {
       console.log('Checking admin setup status...');
       
-      // Busca o registro mais recente com password_set = true
-      const { data: configuredAdmin, error: configuredError } = await supabase
+      // Primeira tentativa: verificar se existe admin configurado
+      const { data: adminSetups, error: setupError } = await supabase
         .from('admin_setup')
-        .select('password_set, admin_user_id')
-        .eq('password_set', true)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .select('password_set, admin_user_id, updated_at')
+        .order('updated_at', { ascending: false });
 
-      console.log('Configured admin check:', { configuredAdmin, configuredError });
+      console.log('Admin setup query result:', { adminSetups, setupError });
 
-      if (configuredAdmin?.password_set) {
-        console.log('Admin already configured, showing login mode');
-        setIsSetupMode(false);
+      if (setupError) {
+        console.error('Error querying admin_setup:', setupError);
+        // Em caso de erro, verificar se existe perfil admin como fallback
+        const { data: adminProfile, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, user_type')
+          .eq('user_type', 'admin')
+          .limit(1)
+          .maybeSingle();
+
+        console.log('Admin profile fallback:', { adminProfile, profileError });
+        
+        if (adminProfile) {
+          console.log('Found admin profile, assuming configured - showing login mode');
+          setIsSetupMode(false);
+        } else {
+          console.log('No admin profile found, showing setup mode');
+          setIsSetupMode(true);
+        }
         return;
       }
 
-      // Se não encontrou admin configurado, verifica se existe algum registro
-      const { data: anyAdmin, error: anyError } = await supabase
-        .from('admin_setup')
-        .select('password_set')
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      console.log('Any admin check:', { anyAdmin, anyError });
-
-      if (anyError && anyError.code !== 'PGRST116') {
-        console.error('Error checking admin setup:', anyError);
-        setIsSetupMode(true);
-      } else if (anyAdmin) {
-        console.log('Admin exists but not configured, showing setup mode');
-        setIsSetupMode(true);
+      // Se encontrou registros de admin_setup
+      if (adminSetups && adminSetups.length > 0) {
+        const configuredAdmin = adminSetups.find(admin => admin.password_set === true);
+        
+        if (configuredAdmin) {
+          console.log('Admin is configured, showing login mode');
+          setIsSetupMode(false);
+        } else {
+          console.log('Admin exists but not configured, showing setup mode');
+          setIsSetupMode(true);
+        }
       } else {
-        console.log('No admin found, showing setup mode');
+        console.log('No admin setup records found, showing setup mode');
         setIsSetupMode(true);
       }
     } catch (error) {
       console.error('Error checking admin setup:', error);
+      // Em caso de erro, assumir que precisa configurar
       setIsSetupMode(true);
     } finally {
       setCheckingSetup(false);
@@ -172,9 +181,26 @@ export const AdminAuth = () => {
             <Shield className="w-8 h-8 text-primary-foreground" />
           </div>
         </div>
-        <CardTitle className="text-2xl font-bold text-center">
-          {isSetupMode ? 'Configurar Administrador' : 'Login Admin'}
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-2xl font-bold">
+            {isSetupMode ? 'Configurar Administrador' : 'Login Admin'}
+          </CardTitle>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setCheckingSetup(true);
+              setError(null);
+              checkAdminSetup();
+            }}
+            className="flex items-center gap-2"
+            disabled={checkingSetup}
+          >
+            <RefreshCw className={`h-4 w-4 ${checkingSetup ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Atualizar</span>
+          </Button>
+        </div>
         <CardDescription className="text-center">
           {isSetupMode 
             ? 'Defina uma senha segura para o painel administrativo'
