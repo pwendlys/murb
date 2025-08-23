@@ -34,6 +34,8 @@ export const DriverFeePayments = () => {
     canRequestFee: boolean;
     hasActiveFee: boolean;
     serviceFeeAmount: number;
+    availableBalance: number;
+    serviceFeeSettings: { type: string; value: number } | null;
   } | null>(null);
   const [feeAmount, setFeeAmount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
@@ -82,9 +84,9 @@ export const DriverFeePayments = () => {
       setFees(feesData);
       setFeeStatus(statusData);
       
-      // Calcular valor da taxa baseado nas configurações e ganhos totais
+      // Calcular valor da taxa baseado no saldo disponível
       try {
-        const feePreview = await calculateServiceFee(balanceData.total_earnings);
+        const feePreview = await calculateServiceFee(balanceData.available);
         setFeeAmount(feePreview);
         
         // Usar serviceFeeAmount do status se disponível
@@ -256,17 +258,61 @@ export const DriverFeePayments = () => {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Configurações da Taxa */}
+          {feeStatus?.serviceFeeSettings && (
+            <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <CreditCard className="w-4 h-4 text-blue-600" />
+                <span className="font-medium text-blue-800">Configuração da Taxa</span>
+              </div>
+              <div className="text-sm text-blue-700">
+                {feeStatus.serviceFeeSettings.type === 'fixed' ? (
+                  <p>Taxa fixa: <strong>R$ {feeStatus.serviceFeeSettings.value.toFixed(2)}</strong></p>
+                ) : (
+                  <p>Taxa percentual: <strong>{feeStatus.serviceFeeSettings.value}%</strong> do saldo disponível</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Cálculo da Taxa */}
           {feeAmount > 0 && (
-            <div className="bg-muted/50 p-3 rounded-lg">
+            <div className="bg-muted/50 p-4 rounded-lg space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Valor da Taxa de Serviço:</span>
+                <span className="text-sm font-medium">Seu Saldo Disponível:</span>
+                <span className="text-lg font-bold text-green-600">R$ {available.toFixed(2)}</span>
+              </div>
+              {feeStatus?.serviceFeeSettings && (
+                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span>
+                    {feeStatus.serviceFeeSettings.type === 'fixed' 
+                      ? 'Taxa fixa' 
+                      : `${feeStatus.serviceFeeSettings.value}% de R$ ${available.toFixed(2)}`
+                    }:
+                  </span>
+                  <span className="font-medium">R$ {feeAmount.toFixed(2)}</span>
+                </div>
+              )}
+              <hr className="border-border" />
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Valor da Taxa:</span>
                 <span className="text-lg font-bold text-primary">R$ {feeAmount.toFixed(2)}</span>
               </div>
             </div>
           )}
           
+          {/* Aviso Importante */}
+          <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+              <div className="text-sm text-yellow-800">
+                <p className="font-medium mb-1">⚠️ Atenção: Saldo será zerado</p>
+                <p>Ao solicitar o pagamento da taxa, todo seu saldo disponível (R$ {available.toFixed(2)}) será reservado, mas apenas a taxa de R$ {feeAmount.toFixed(2)} será cobrada. O restante será liberado após confirmação do pagamento.</p>
+              </div>
+            </div>
+          </div>
+          
           <p className="text-sm text-muted-foreground">
-            Ao solicitar, o valor da taxa será reservado do seu saldo disponível.
             Você terá 2 dias para efetuar o pagamento após a solicitação.
           </p>
           
@@ -292,7 +338,7 @@ export const DriverFeePayments = () => {
                 Processando...
               </>
             ) : canRequest ? (
-              `Solicitar Pagamento (R$ ${feeAmount.toFixed(2)})`
+              `Solicitar Pagamento - Reservar R$ ${available.toFixed(2)}`
             ) : feeStatus?.hasActiveFee ? (
               'Você já possui uma solicitação ativa'
             ) : !feeStatus?.canRequestFee ? (
@@ -309,9 +355,10 @@ export const DriverFeePayments = () => {
                 <div>
                   <p className="font-medium">Lembre-se:</p>
                   <ul className="mt-1 space-y-1 text-xs">
-                    <li>• O valor será reservado imediatamente</li>
+                    <li>• Todo o saldo disponível será reservado (R$ {available.toFixed(2)})</li>
+                    <li>• Taxa a ser paga: R$ {feeAmount.toFixed(2)}</li>
                     <li>• Você terá 2 dias para efetuar o pagamento</li>
-                    <li>• Após o vencimento, entre em contato com o administrador</li>
+                    <li>• Após confirmação, o restante do saldo será liberado</li>
                   </ul>
                 </div>
               </div>
@@ -345,8 +392,13 @@ export const DriverFeePayments = () => {
                       <Badge className={getStatusColor(fee.status)}>
                         {getStatusLabel(fee.status)}
                       </Badge>
-                      <span className="font-medium">R$ {Number(fee.amount).toFixed(2)}</span>
+                      <span className="font-medium">Reservado: R$ {Number(fee.amount).toFixed(2)}</span>
                     </div>
+                    {fee.actual_fee_amount && fee.available_balance_before && (
+                      <div className="text-sm text-muted-foreground">
+                        Saldo anterior: R$ {fee.available_balance_before.toFixed(2)} • Taxa paga: R$ {fee.actual_fee_amount.toFixed(2)}
+                      </div>
+                    )}
                     <div className="text-sm text-muted-foreground">
                       Solicitado em: {new Date(fee.created_at).toLocaleDateString('pt-BR')}
                       {fee.payment_due_date && (

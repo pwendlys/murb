@@ -3,13 +3,15 @@ export type FeeStatus = "not_requested" | "pending" | "paid" | "canceled" | "exp
 export interface FeePayment {
   id: string;
   driver_id: string;
-  amount: number;
+  amount: number; // Saldo total reservado
   status: FeeStatus;
   initial_due_date: string;  // 2 dias após primeiro acesso
   payment_due_date: string | null;  // 2 dias após solicitação
   paid_at: string | null;
   canceled_at: string | null;
   canceled_reason: string | null;
+  available_balance_before: number; // Saldo antes da solicitação
+  actual_fee_amount: number; // Valor real da taxa
   created_at: string;
   updated_at: string;
 }

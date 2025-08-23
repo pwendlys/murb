@@ -107,7 +107,7 @@ export async function listAllFeesForAdmin(): Promise<FeePaymentWithProfile[]> {
   return data || [];
 }
 
-export async function calculateServiceFee(totalEarnings: number): Promise<number> {
+export async function calculateServiceFee(availableBalance: number): Promise<number> {
   try {
     // Buscar configurações de preço
     const { data: settings, error } = await supabase
@@ -126,7 +126,8 @@ export async function calculateServiceFee(totalEarnings: number): Promise<number
     if (setting.service_fee_type === 'fixed') {
       return Number(setting.service_fee_value);
     } else if (setting.service_fee_type === 'percent') {
-      return totalEarnings * (Number(setting.service_fee_value) / 100);
+      // Calcular porcentagem sobre o saldo disponível
+      return availableBalance * (Number(setting.service_fee_value) / 100);
     }
 
     return 0;
@@ -141,6 +142,8 @@ export async function getDriverFeeStatus(driverId: string): Promise<{
   canRequestFee: boolean;
   hasActiveFee: boolean;
   serviceFeeAmount: number;
+  availableBalance: number;
+  serviceFeeSettings: { type: string; value: number } | null;
 }> {
   try {
     // Buscar data de criação do perfil
@@ -167,20 +170,33 @@ export async function getDriverFeeStatus(driverId: string): Promise<{
       .in("status", ["pending", "expired"])
       .limit(1);
 
-    // Calcular taxa de serviço baseada nos ganhos totais
+    // Buscar saldo disponível e configurações da taxa
     const { data: balance } = await supabase
       .from('driver_balances')
-      .select('total_earnings')
+      .select('available')
       .eq('driver_id', driverId)
       .single();
+
+    const { data: settings } = await supabase
+      .from('pricing_settings')
+      .select('service_fee_type, service_fee_value')
+      .order('created_at', { ascending: false })
+      .limit(1);
     
-    const serviceFeeAmount = await calculateServiceFee(balance?.total_earnings || 0);
+    const availableBalance = balance?.available || 0;
+    const serviceFeeAmount = await calculateServiceFee(availableBalance);
+    const serviceFeeSettings = settings?.[0] ? {
+      type: settings[0].service_fee_type,
+      value: Number(settings[0].service_fee_value)
+    } : null;
 
     return {
       daysUntilInitialDeadline: Math.max(0, daysUntilInitialDeadline),
       canRequestFee,
       hasActiveFee: (activeFee?.length || 0) > 0,
-      serviceFeeAmount
+      serviceFeeAmount,
+      availableBalance,
+      serviceFeeSettings
     };
   } catch (error: any) {
     throw new Error(error.message || 'Erro ao verificar status da taxa');
