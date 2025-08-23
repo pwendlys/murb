@@ -16,9 +16,45 @@ export async function requestFeePayment(): Promise<FeePayment> {
     if (error.message.includes('no_available_funds')) {
       throw new Error('Sem saldo disponível para reservar');
     }
+    if (error.message.includes('invalid_fee_amount')) {
+      throw new Error('Taxa de serviço não configurada ou inválida');
+    }
+    if (error.message.includes('insufficient_funds_for_fee')) {
+      throw new Error('Saldo insuficiente para pagamento da taxa');
+    }
     throw new Error(error.message || 'Erro ao solicitar pagamento da taxa');
   }
   return data;
+}
+
+export async function calculateServiceFeePreview(): Promise<number> {
+  const { data: user } = await supabase.auth.getUser();
+  if (!user?.user?.id) throw new Error('Usuário não autenticado');
+  
+  // Buscar configurações de preço
+  const { data: settings, error: settingsError } = await supabase
+    .from('pricing_settings')
+    .select('service_fee_type, service_fee_value')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+    
+  if (settingsError || !settings) {
+    throw new Error('Configurações de preço não encontradas');
+  }
+
+  // Buscar saldo do motorista
+  const balance = await getMyBalances();
+  
+  // Calcular taxa
+  let feeAmount = 0;
+  if (settings.service_fee_type === 'fixed') {
+    feeAmount = Number(settings.service_fee_value || 0);
+  } else if (settings.service_fee_type === 'percent') {
+    feeAmount = balance.total_earnings * (Number(settings.service_fee_value || 0) / 100);
+  }
+  
+  return Math.max(0, Math.round(feeAmount * 100) / 100);
 }
 
 export async function markFeePaid(id: string): Promise<FeePayment> {

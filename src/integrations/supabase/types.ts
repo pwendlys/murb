@@ -502,6 +502,10 @@ export type Database = {
           updated_at: string
         }
       }
+      calculate_service_fee: {
+        Args: { p_driver_id: string; p_total_earnings: number }
+        Returns: number
+      }
       cancel_fee: {
         Args: { p_fee_id: string; p_reason: string }
         Returns: {

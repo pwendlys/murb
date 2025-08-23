@@ -10,7 +10,8 @@ import {
   requestFeePayment, 
   getMyBalances, 
   getDriverFeeStatus,
-  listMyFees
+  listMyFees,
+  calculateServiceFeePreview
 } from '@/services/fees';
 import type { DriverBalance, FeePayment } from '@/types/fees';
 import { toast } from 'sonner';
@@ -33,6 +34,7 @@ export const DriverFeePayments = () => {
     canRequestFee: boolean;
     hasActiveFee: boolean;
   } | null>(null);
+  const [feeAmount, setFeeAmount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [requesting, setRequesting] = useState(false);
 
@@ -78,6 +80,15 @@ export const DriverFeePayments = () => {
       setBalance(balanceData);
       setFees(feesData);
       setFeeStatus(statusData);
+      
+      // Calcular valor da taxa baseado nas configurações
+      try {
+        const feePreview = await calculateServiceFeePreview();
+        setFeeAmount(feePreview);
+      } catch (error) {
+        console.error('Error calculating fee preview:', error);
+        setFeeAmount(0);
+      }
     } catch (error: any) {
       console.error('Error fetching data:', error);
       toast.error(error.message || 'Erro ao carregar dados');
@@ -144,7 +155,7 @@ export const DriverFeePayments = () => {
   const available = balance?.available || 0;
   const reserved = balance?.reserved || 0;
   const total = balance?.total_earnings || 0;
-  const canRequest = feeStatus?.canRequestFee && !feeStatus?.hasActiveFee && available > 0;
+  const canRequest = feeStatus?.canRequestFee && !feeStatus?.hasActiveFee && available >= feeAmount && feeAmount > 0;
 
   return (
     <div className="space-y-6">
@@ -239,10 +250,30 @@ export const DriverFeePayments = () => {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {feeAmount > 0 && (
+            <div className="bg-muted/50 p-3 rounded-lg">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Valor da Taxa de Serviço:</span>
+                <span className="text-lg font-bold text-primary">R$ {feeAmount.toFixed(2)}</span>
+              </div>
+            </div>
+          )}
+          
           <p className="text-sm text-muted-foreground">
-            Ao solicitar, 100% do seu saldo disponível será reservado para pagamento da taxa.
+            Ao solicitar, o valor da taxa será reservado do seu saldo disponível.
             Você terá 2 dias para efetuar o pagamento após a solicitação.
           </p>
+          
+          {available < feeAmount && feeAmount > 0 && (
+            <div className="bg-red-50 border border-red-200 p-3 rounded-lg">
+              <div className="flex items-center gap-2 text-red-600">
+                <AlertTriangle className="w-4 h-4" />
+                <span className="text-sm font-medium">
+                  Saldo insuficiente. Necessário: R$ {feeAmount.toFixed(2)}, Disponível: R$ {available.toFixed(2)}
+                </span>
+              </div>
+            </div>
+          )}
           
           <Button 
             onClick={handleRequestPayment}
@@ -255,7 +286,7 @@ export const DriverFeePayments = () => {
                 Processando...
               </>
             ) : canRequest ? (
-              `Solicitar Pagamento (R$ ${available.toFixed(2)})`
+              `Solicitar Pagamento (R$ ${feeAmount.toFixed(2)})`
             ) : feeStatus?.hasActiveFee ? (
               'Você já possui uma solicitação ativa'
             ) : !feeStatus?.canRequestFee ? (
