@@ -1,12 +1,20 @@
 import React, { useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { AuthSelector } from '@/components/auth/AuthSelector';
+import { useNavigate } from 'react-router-dom';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { DriverBottomNavigation } from '@/components/layout/DriverBottomNavigation';
 import { DriverFeePayments } from '@/components/driver/DriverFeePayments';
 
 export const DriverEarningsPage = () => {
   const { user, loading } = useAuth();
+  const navigate = useNavigate();
+
+  // Redirect to auth if not authenticated
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate('/auth', { replace: true });
+    }
+  }, [user, loading, navigate]);
 
   // SEO Meta tags
   useEffect(() => {
@@ -36,7 +44,7 @@ export const DriverEarningsPage = () => {
   }
 
   if (!user) {
-    return <AuthSelector />;
+    return null;
   }
 
   return (

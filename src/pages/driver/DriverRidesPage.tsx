@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { AuthSelector } from '@/components/auth/AuthSelector';
+import { useNavigate } from 'react-router-dom';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { DriverBottomNavigation } from '@/components/layout/DriverBottomNavigation';
 import { DriverCompletedRideCard } from '@/components/driver/DriverCompletedRideCard';
@@ -15,6 +15,7 @@ import { ptBR } from 'date-fns/locale';
 
 export const DriverRidesPage = () => {
   const { user, loading } = useAuth();
+  const navigate = useNavigate();
   const [rides, setRides] = useState<Ride[]>([]);
   const [ridesLoading, setRidesLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'completed' | 'in_progress' | 'cancelled'>('all');
@@ -74,6 +75,13 @@ export const DriverRidesPage = () => {
     }
   };
 
+  // Redirect to auth if not authenticated
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate('/auth', { replace: true });
+    }
+  }, [user, loading, navigate]);
+
   useEffect(() => {
     fetchRides();
   }, [user]);
@@ -129,7 +137,7 @@ export const DriverRidesPage = () => {
   }
 
   if (!user) {
-    return <AuthSelector />;
+    return null;
   }
 
   return (

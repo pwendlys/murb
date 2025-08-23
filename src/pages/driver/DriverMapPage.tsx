@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
-import { AuthSelector } from '@/components/auth/AuthSelector';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { GoogleMap } from '@/components/ui/google-map';
 import { DriverBottomNavigation } from '@/components/layout/DriverBottomNavigation';
@@ -98,6 +97,13 @@ export const DriverMapPage = () => {
     }
   };
 
+  // Redirect to auth if not authenticated
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate('/auth', { replace: true });
+    }
+  }, [user, loading, navigate]);
+
   useEffect(() => {
     fetchDriverRides();
 
@@ -150,7 +156,7 @@ export const DriverMapPage = () => {
   }
 
   if (!user) {
-    return <AuthSelector />;
+    return null;
   }
 
   return (

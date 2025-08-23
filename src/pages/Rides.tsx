@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -16,12 +17,20 @@ import { AuthSelector } from '@/components/auth/AuthSelector';
 
 const RidesPage = () => {
   const { user, profile } = useAuth();
+  const navigate = useNavigate();
   const [rides, setRides] = useState<Ride[]>([]);
   const [ratedRides, setRatedRides] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [rateDialogOpen, setRateDialogOpen] = useState(false);
   const [selectedRideForRating, setSelectedRideForRating] = useState<Ride | null>(null);
   const [cancellingRideId, setCancellingRideId] = useState<string | null>(null);
+
+  // Redirect to auth if not authenticated
+  useEffect(() => {
+    if (!user) {
+      navigate('/auth', { replace: true });
+    }
+  }, [user, navigate]);
 
   useEffect(() => {
     if (user) {
@@ -270,7 +279,7 @@ const RidesPage = () => {
   };
 
   if (!user) {
-    return <AuthSelector />;
+    return null;
   }
 
   return (
