@@ -2,7 +2,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AuthForm } from '@/components/auth/AuthForm';
-import { AdminAuth } from '@/components/auth/AdminAuth';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,7 +13,6 @@ const Auth = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const userType = searchParams.get('type');
-  const isAdmin = searchParams.get('admin') === 'true';
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -23,8 +21,6 @@ const Auth = () => {
         navigate('/driver/map', { replace: true });
       } else if (profile.user_type === 'passenger') {
         navigate('/map', { replace: true });
-      } else if (profile.user_type === 'admin') {
-        navigate('/admin', { replace: true });
       }
     }
   }, [user, profile, navigate]);
@@ -41,23 +37,6 @@ const Auth = () => {
     return null; // Will redirect via useEffect
   }
 
-  if (isAdmin) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="w-full max-w-md">
-          <div className="mb-4">
-            <Link to="/">
-              <Button variant="ghost" size="sm" className="gap-2">
-                <ArrowLeft className="h-4 w-4" />
-                Voltar
-              </Button>
-            </Link>
-          </div>
-          <AdminAuth />
-        </div>
-      </div>
-    );
-  }
 
   if (!userType) {
     return (
@@ -83,13 +62,6 @@ const Auth = () => {
                 Sou Mototaxista
               </Button>
             </Link>
-            <div className="pt-4 border-t">
-              <Link to="/auth?admin=true" className="block">
-                <Button variant="ghost" className="w-full text-sm text-muted-foreground">
-                  Acesso Administrativo
-                </Button>
-              </Link>
-            </div>
             <div className="pt-2">
               <Link to="/">
                 <Button variant="ghost" size="sm" className="gap-2">

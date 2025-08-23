@@ -17,7 +17,8 @@ const Index = () => {
       } else if (profile.user_type === 'passenger') {
         navigate('/map', { replace: true });
       } else if (profile.user_type === 'admin') {
-        navigate('/admin', { replace: true });
+        const adminSecretPath = import.meta.env.VITE_ADMIN_SECRET_PATH || '/sistema-interno-2024';
+        navigate(`${adminSecretPath}/painel`, { replace: true });
       }
     }
   }, [user, profile, navigate]);

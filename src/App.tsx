@@ -11,6 +11,7 @@ import Auth from "./pages/Auth";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 import Admin from "./pages/Admin";
+import AdminLogin from "./pages/AdminLogin";
 import Map from "./pages/Map";
 import Rides from "./pages/Rides";
 import DriverOnboardingGate from "./components/driver/DriverOnboardingGate";
@@ -24,7 +25,10 @@ import { PWAHandler } from "./components/pwa/PWAHandler";
 
 const queryClient = new QueryClient();
 
-const App = () => (
+const App = () => {
+  const adminSecretPath = import.meta.env.VITE_ADMIN_SECRET_PATH || '/sistema-interno-2024';
+  
+  return (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider
       attribute="class"
@@ -43,7 +47,10 @@ const App = () => (
             <Route path="/profile" element={<Profile />} />
             <Route path="/map" element={<Map />} />
             <Route path="/rides" element={<Rides />} />
-            <Route path="/admin" element={<Admin />} />
+            
+            {/* Admin Secret Routes */}
+            <Route path={adminSecretPath} element={<AdminLogin />} />
+            <Route path={`${adminSecretPath}/painel`} element={<Admin />} />
             
             {/* Driver Routes */}
             <Route path="/driver/map" element={<DriverMapPage />} />
@@ -67,5 +74,6 @@ const App = () => (
     </ThemeProvider>
   </QueryClientProvider>
 );
+};
 
 export default App;
