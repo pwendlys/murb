@@ -20,13 +20,17 @@ import {
   User,
   Calendar,
   CreditCard,
-  Eye
+  Eye,
+  Search,
+  Filter,
+  X
 } from 'lucide-react';
 
 export const FeePaymentManagement = () => {
   const [fees, setFees] = useState<FeePaymentWithProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'paid' | 'canceled' | 'expired'>('all');
+  const [searchTerm, setSearchTerm] = useState('');
   const [selectedFee, setSelectedFee] = useState<FeePaymentWithProfile | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -127,16 +131,30 @@ export const FeePaymentManagement = () => {
   };
 
   const filteredFees = fees.filter(fee => {
-    if (statusFilter === 'all') return true;
-    return fee.status === statusFilter;
+    // Filtro por status
+    const statusMatch = statusFilter === 'all' || fee.status === statusFilter;
+    
+    // Filtro por nome do motorista
+    const nameMatch = !searchTerm || 
+      fee.profiles?.full_name?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    return statusMatch && nameMatch;
   });
 
   const stats = {
     total: fees.length,
     pending: fees.filter(f => f.status === 'pending').length,
     paid: fees.filter(f => f.status === 'paid').length,
+    canceled: fees.filter(f => f.status === 'canceled').length,
     expired: fees.filter(f => f.status === 'expired').length,
     totalAmount: fees.filter(f => f.status === 'paid').reduce((sum, f) => sum + Number(f.actual_fee_amount || 0), 0)
+  };
+
+  const hasActiveFilters = statusFilter !== 'all' || searchTerm.trim() !== '';
+
+  const clearFilters = () => {
+    setStatusFilter('all');
+    setSearchTerm('');
   };
 
   if (loading) {
@@ -214,21 +232,89 @@ export const FeePaymentManagement = () => {
 
       {/* Filtros */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="flex gap-4">
-            <Select value={statusFilter} onValueChange={(value: any) => setStatusFilter(value)}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="Filtrar por status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="pending">Pendentes</SelectItem>
-                <SelectItem value="paid">Pagos</SelectItem>
-                <SelectItem value="canceled">Cancelados</SelectItem>
-                <SelectItem value="expired">Vencidos</SelectItem>
-              </SelectContent>
-            </Select>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Filter className="w-5 h-5" />
+            Filtros e Pesquisa
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Campo de Pesquisa */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Pesquisar por nome do motorista..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+
+            {/* Filtro de Status */}
+            <div className="flex gap-2">
+              <Select value={statusFilter} onValueChange={(value: any) => setStatusFilter(value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Filtrar por status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">
+                    <div className="flex items-center gap-2">
+                      <Filter className="w-4 h-4" />
+                      Todos ({stats.total})
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="pending">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-yellow-600" />
+                      Pendentes ({stats.pending})
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="paid">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-green-600" />
+                      Pagos ({stats.paid})
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="canceled">
+                    <div className="flex items-center gap-2">
+                      <XCircle className="w-4 h-4 text-red-600" />
+                      Cancelados ({stats.canceled})
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="expired">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-red-600" />
+                      Vencidos ({stats.expired})
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Botão Limpar Filtros */}
+              {hasActiveFilters && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={clearFilters}
+                  title="Limpar filtros"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
           </div>
+
+          {/* Contador de Resultados */}
+          {hasActiveFilters && (
+            <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
+              <Search className="w-4 h-4" />
+              Mostrando {filteredFees.length} de {stats.total} registros
+              {searchTerm && (
+                <span>• Pesquisando por "{searchTerm}"</span>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
