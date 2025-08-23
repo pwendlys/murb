@@ -219,7 +219,9 @@ export type Database = {
       }
       fee_payments: {
         Row: {
+          actual_fee_amount: number | null
           amount: number
+          available_balance_before: number | null
           canceled_at: string | null
           canceled_reason: string | null
           created_at: string
@@ -232,7 +234,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          actual_fee_amount?: number | null
           amount: number
+          available_balance_before?: number | null
           canceled_at?: string | null
           canceled_reason?: string | null
           created_at?: string
@@ -245,7 +249,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          actual_fee_amount?: number | null
           amount?: number
+          available_balance_before?: number | null
           canceled_at?: string | null
           canceled_reason?: string | null
           created_at?: string
@@ -509,7 +515,9 @@ export type Database = {
       cancel_fee: {
         Args: { p_fee_id: string; p_reason: string }
         Returns: {
+          actual_fee_amount: number | null
           amount: number
+          available_balance_before: number | null
           canceled_at: string | null
           canceled_reason: string | null
           created_at: string
@@ -525,7 +533,9 @@ export type Database = {
       mark_fee_paid: {
         Args: { p_fee_id: string }
         Returns: {
+          actual_fee_amount: number | null
           amount: number
+          available_balance_before: number | null
           canceled_at: string | null
           canceled_reason: string | null
           created_at: string
@@ -541,7 +551,9 @@ export type Database = {
       request_fee_payment: {
         Args: Record<PropertyKey, never>
         Returns: {
+          actual_fee_amount: number | null
           amount: number
+          available_balance_before: number | null
           canceled_at: string | null
           canceled_reason: string | null
           created_at: string
