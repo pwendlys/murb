@@ -11,7 +11,7 @@ import {
   getMyBalances, 
   getDriverFeeStatus,
   listMyFees,
-  calculateServiceFeePreview
+  calculateServiceFee
 } from '@/services/fees';
 import type { DriverBalance, FeePayment } from '@/types/fees';
 import { toast } from 'sonner';
@@ -33,6 +33,7 @@ export const DriverFeePayments = () => {
     daysUntilInitialDeadline: number;
     canRequestFee: boolean;
     hasActiveFee: boolean;
+    serviceFeeAmount: number;
   } | null>(null);
   const [feeAmount, setFeeAmount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
@@ -81,10 +82,15 @@ export const DriverFeePayments = () => {
       setFees(feesData);
       setFeeStatus(statusData);
       
-      // Calcular valor da taxa baseado nas configurações
+      // Calcular valor da taxa baseado nas configurações e ganhos totais
       try {
-        const feePreview = await calculateServiceFeePreview();
+        const feePreview = await calculateServiceFee(balanceData.total_earnings);
         setFeeAmount(feePreview);
+        
+        // Usar serviceFeeAmount do status se disponível
+        if (statusData.serviceFeeAmount) {
+          setFeeAmount(statusData.serviceFeeAmount);
+        }
       } catch (error) {
         console.error('Error calculating fee preview:', error);
         setFeeAmount(0);

@@ -285,16 +285,24 @@ export const DriverEarnings = () => {
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Info className="w-4 h-4 text-blue-600" />
-              Taxa de Serviço
+              Taxa de Serviço Configurada
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <p className="text-sm text-muted-foreground">
-              {pricingSettings.service_fee_type === 'fixed' 
-                ? `Taxa fixa de R$ ${pricingSettings.service_fee_value.toFixed(2)} será descontada pelo administrador no processamento do pagamento.`
-                : `Taxa de ${pricingSettings.service_fee_value}% será descontada pelo administrador no processamento do pagamento.`
-              }
-            </p>
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                <strong>Para saques:</strong> {pricingSettings.service_fee_type === 'fixed' 
+                  ? `Taxa fixa de R$ ${pricingSettings.service_fee_value.toFixed(2)} será descontada no processamento do pagamento.`
+                  : `Taxa de ${pricingSettings.service_fee_value}% será descontada no processamento do pagamento.`
+                }
+              </p>
+              <p className="text-sm text-muted-foreground">
+                <strong>Para cobrança de taxas obrigatórias:</strong> {pricingSettings.service_fee_type === 'fixed' 
+                  ? `Valor fixo de R$ ${pricingSettings.service_fee_value.toFixed(2)} deve ser pago pelos motoristas.`
+                  : `${pricingSettings.service_fee_value}% dos ganhos totais deve ser pago pelos motoristas.`
+                }
+              </p>
+            </div>
           </CardContent>
         </Card>
       )}
