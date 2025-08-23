@@ -136,7 +136,7 @@ export const FeePaymentManagement = () => {
     pending: fees.filter(f => f.status === 'pending').length,
     paid: fees.filter(f => f.status === 'paid').length,
     expired: fees.filter(f => f.status === 'expired').length,
-    totalAmount: fees.filter(f => f.status === 'paid').reduce((sum, f) => sum + Number(f.amount), 0)
+    totalAmount: fees.filter(f => f.status === 'paid').reduce((sum, f) => sum + Number(f.actual_fee_amount || 0), 0)
   };
 
   if (loading) {
@@ -275,7 +275,7 @@ export const FeePaymentManagement = () => {
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
                         <div className="flex items-center gap-1">
                           <DollarSign className="w-3 h-3" />
-                          R$ {Number(fee.amount).toFixed(2)}
+                          R$ {Number(fee.actual_fee_amount || 0).toFixed(2)}
                         </div>
                         <div className="flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
@@ -330,8 +330,16 @@ export const FeePaymentManagement = () => {
                   <span>{selectedFee.profiles?.phone || 'N/A'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Valor:</span>
-                  <span className="font-bold text-lg">R$ {Number(selectedFee.amount).toFixed(2)}</span>
+                  <span className="text-sm text-muted-foreground">Taxa a Receber:</span>
+                  <span className="font-bold text-lg text-green-600">R$ {Number(selectedFee.actual_fee_amount || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">Saldo Reservado:</span>
+                  <span className="text-muted-foreground">R$ {Number(selectedFee.amount).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">Saldo Anterior:</span>
+                  <span className="text-muted-foreground">R$ {Number(selectedFee.available_balance_before || 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Status:</span>
