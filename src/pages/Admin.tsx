@@ -11,6 +11,7 @@ import PricingSettingsForm from '@/components/admin/PricingSettingsForm';
 import UserManagement from '@/components/admin/UserManagement';
 import RideHistory from '@/components/admin/RideHistory';
 import EarningsHistory from '@/components/admin/EarningsHistory';
+import { FeePaymentManagement } from '@/components/admin/FeePaymentManagement';
 import { TaxDashboard } from '@/components/admin/TaxDashboard';
 
 const Admin = () => {
@@ -65,11 +66,12 @@ const Admin = () => {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="settings">
-            <TabsList className="grid grid-cols-5 w-full">
+            <TabsList className="grid grid-cols-6 w-full">
               <TabsTrigger value="settings">Configurações de Preço</TabsTrigger>
               <TabsTrigger value="users">Usuários</TabsTrigger>
               <TabsTrigger value="rides">Histórico de Corridas</TabsTrigger>
               <TabsTrigger value="earnings">Histórico de Ganhos</TabsTrigger>
+              <TabsTrigger value="fees">Cobrança de Taxas</TabsTrigger>
               <TabsTrigger value="dashboard">Dashboard de Taxas</TabsTrigger>
             </TabsList>
 
@@ -87,6 +89,10 @@ const Admin = () => {
 
             <TabsContent value="earnings" className="pt-4">
               <EarningsHistory />
+            </TabsContent>
+
+            <TabsContent value="fees" className="pt-4">
+              <FeePaymentManagement />
             </TabsContent>
 
             <TabsContent value="dashboard" className="pt-4">
