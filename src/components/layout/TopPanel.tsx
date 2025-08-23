@@ -2,10 +2,14 @@ import React, { useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { RideRequest } from "@/components/passenger/RideRequest";
 import { ActiveRideTracking } from "@/components/passenger/ActiveRideTracking";
 import { useActiveRide } from "@/hooks/useActiveRide";
 import { LocationCoords } from "@/services/googleMaps";
+
+export type RideType = 'normal' | 'negotiated';
+
 interface TopPanelProps {
   currentLocation: LocationCoords | null;
   onDestinationUpdate?: (destination: LocationCoords | null) => void;
@@ -17,6 +21,7 @@ export const TopPanel: React.FC<TopPanelProps> = ({
   onOriginUpdate
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
+  const [rideType, setRideType] = useState<RideType>('normal');
   const {
     activeRide,
     cancelRide
@@ -32,9 +37,45 @@ export const TopPanel: React.FC<TopPanelProps> = ({
       </div>
 
       {/* Content */}
-      <div className={cn("transition-all duration-300 ease-in-out overflow-hidden", isExpanded ? "max-h-[400px] opacity-100" : "max-h-0 opacity-0")}>
+      <div className={cn("transition-all duration-300 ease-in-out overflow-hidden", isExpanded ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0")}>
         <div className="p-4 max-w-md mx-auto">
-          {activeRide ? <ActiveRideTracking ride={activeRide} onCancel={cancelRide} /> : <RideRequest variant="overlay" currentLocation={currentLocation} onDestinationUpdate={onDestinationUpdate} onOriginUpdate={onOriginUpdate} />}
+          {activeRide ? (
+            <ActiveRideTracking ride={activeRide} onCancel={cancelRide} />
+          ) : (
+            <div className="space-y-3">
+              {/* Seletor de tipo de corrida */}
+              <div className="flex gap-2 justify-center">
+                <Button
+                  variant={rideType === 'normal' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setRideType('normal')}
+                  className="flex-1 h-8 text-xs"
+                >
+                  Corrida Normal
+                </Button>
+                <Button
+                  variant={rideType === 'negotiated' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setRideType('negotiated')}
+                  className="flex-1 h-8 text-xs relative"
+                >
+                  Moto Negocia
+                  <Badge variant="secondary" className="ml-1 px-1 py-0 text-[10px] h-4">
+                    NOVO
+                  </Badge>
+                </Button>
+              </div>
+              
+              {/* Componente de solicitação */}
+              <RideRequest 
+                variant="overlay" 
+                rideType={rideType}
+                currentLocation={currentLocation} 
+                onDestinationUpdate={onDestinationUpdate} 
+                onOriginUpdate={onOriginUpdate} 
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>;

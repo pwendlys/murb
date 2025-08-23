@@ -18,15 +18,20 @@ import {
   RouteDetails 
 } from '@/services/googleMaps';
 import { usePricingSettings, computePriceFromSettings } from '@/hooks/usePricingSettings';
+import { MotoNegociaOffer } from './MotoNegociaOffer';
+import { centsToReais } from '@/utils/currency';
+
+export type RideType = 'normal' | 'negotiated';
 
 interface RideRequestProps {
   currentLocation: LocationCoords | null;
   onDestinationUpdate?: (destination: LocationCoords | null) => void;
   onOriginUpdate?: (origin: LocationCoords | null) => void;
   variant?: "card" | "overlay";
+  rideType?: RideType;
 }
 
-export const RideRequest = ({ currentLocation, onDestinationUpdate, onOriginUpdate, variant = "card" }: RideRequestProps) => {
+export const RideRequest = ({ currentLocation, onDestinationUpdate, onOriginUpdate, variant = "card", rideType = "normal" }: RideRequestProps) => {
   const { user } = useAuth();
   const { settings } = usePricingSettings();
   const [originAddress, setOriginAddress] = useState('');
@@ -38,6 +43,8 @@ export const RideRequest = ({ currentLocation, onDestinationUpdate, onOriginUpda
   const [rideDetails, setRideDetails] = useState<RouteDetails | null>(null);
   const [usingCurrentLocation, setUsingCurrentLocation] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<string>('');
+  const [showNegotiationOffer, setShowNegotiationOffer] = useState(false);
+  const [negotiatedPrice, setNegotiatedPrice] = useState<number | null>(null);
 
   // Set current location address when available and user chooses to use it
   useEffect(() => {
@@ -238,7 +245,34 @@ export const RideRequest = ({ currentLocation, onDestinationUpdate, onOriginUpda
       });
   };
 
-  const requestRide = async () => {
+  const handleShowNegotiationOffer = () => {
+    const hasOrigin = (usingCurrentLocation && currentLocation) || originAddress.trim();
+    if (!hasOrigin || !destination.trim() || !rideDetails) {
+      toast.error('Por favor, preencha origem e destino');
+      return;
+    }
+
+    // Verificar se uma forma de pagamento foi selecionada
+    if (!paymentMethod) {
+      toast.error('Por favor, selecione uma forma de pagamento');
+      return;
+    }
+
+    setShowNegotiationOffer(true);
+  };
+
+  const handleNegotiationConfirm = async (offerCents: number) => {
+    const offerPrice = centsToReais(offerCents);
+    setNegotiatedPrice(offerPrice);
+    await requestRide(offerPrice);
+    setShowNegotiationOffer(false);
+  };
+
+  const handleNegotiationCancel = () => {
+    setShowNegotiationOffer(false);
+  };
+
+  const requestRide = async (customPrice?: number) => {
     const hasOrigin = (usingCurrentLocation && currentLocation) || originAddress.trim();
     if (!user || !hasOrigin || !destination.trim() || !rideDetails) {
       toast.error('Por favor, preencha origem e destino');
@@ -272,6 +306,8 @@ export const RideRequest = ({ currentLocation, onDestinationUpdate, onOriginUpda
         };
       }
 
+      const finalPrice = customPrice || rideDetails.price;
+      
       const { error } = await supabase.from('rides').insert({
         passenger_id: user.id,
         origin_address: originAddress,
@@ -282,14 +318,18 @@ export const RideRequest = ({ currentLocation, onDestinationUpdate, onOriginUpda
         destination_lng: destinationCoords.lng,
         estimated_duration: parseInt(rideDetails.duration),
         estimated_distance: parseFloat(rideDetails.distance),
-        estimated_price: rideDetails.price,
+        estimated_price: finalPrice,
         status: 'pending',
         payment_method: paymentMethod
       });
 
       if (error) throw error;
 
-      toast.success('Corrida solicitada com sucesso!');
+      const message = rideType === 'negotiated' 
+        ? 'Sua oferta foi enviada aos motoristas!' 
+        : 'Corrida solicitada com sucesso!';
+      toast.success(message);
+      
       setOriginAddress('');
       setOriginPlaceId(null);
       setDestination('');
@@ -297,6 +337,7 @@ export const RideRequest = ({ currentLocation, onDestinationUpdate, onOriginUpda
       setRideDetails(null);
       setUsingCurrentLocation(false);
       setPaymentMethod('');
+      setNegotiatedPrice(null);
       
       // Clear map coordinates
       if (onOriginUpdate) onOriginUpdate(null);
@@ -310,6 +351,17 @@ export const RideRequest = ({ currentLocation, onDestinationUpdate, onOriginUpda
   };
 
   if (variant === "overlay") {
+    // Se está mostrando tela de negociação, renderizar apenas ela
+    if (rideType === 'negotiated' && showNegotiationOffer) {
+      return (
+        <MotoNegociaOffer
+          initialValueCents={rideDetails ? Math.round(rideDetails.price * 100) : 1470}
+          onConfirm={handleNegotiationConfirm}
+          onCancel={handleNegotiationCancel}
+        />
+      );
+    }
+
     return (
       <div className="space-y-3">
         {/* Address Fields - Compact */}
@@ -397,11 +449,15 @@ export const RideRequest = ({ currentLocation, onDestinationUpdate, onOriginUpda
 
             {/* Request Button */}
             <Button 
-              onClick={requestRide}
+              onClick={() => rideType === 'negotiated' ? handleShowNegotiationOffer() : requestRide()}
               disabled={loading || !rideDetails || calculatingRoute || (!originAddress.trim() && !usingCurrentLocation) || !destination.trim() || !paymentMethod}
               className="w-full h-9 bg-ride-gradient hover:opacity-90 transition-opacity text-sm"
             >
-              {loading ? <LoadingSpinner size="sm" /> : 'Solicitar Corrida'}
+              {loading ? (
+                <LoadingSpinner size="sm" />
+              ) : (
+                rideType === 'negotiated' ? 'Fazer Oferta' : 'Solicitar Corrida'
+              )}
             </Button>
           </div>
         )}
@@ -551,7 +607,7 @@ export const RideRequest = ({ currentLocation, onDestinationUpdate, onOriginUpda
         )}
 
         <Button 
-          onClick={requestRide}
+          onClick={() => requestRide()}
           disabled={loading || !rideDetails || calculatingRoute || (!originAddress.trim() && !usingCurrentLocation) || !destination.trim() || !paymentMethod}
           className="w-full h-12 bg-ride-gradient hover:opacity-90 transition-opacity"
         >

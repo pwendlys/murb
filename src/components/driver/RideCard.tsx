@@ -320,7 +320,7 @@ export const RideCard = ({ ride, type, onUpdate }: RideCardProps) => {
       <Card className="hover:shadow-md transition-shadow">
         <CardContent className="p-4">
           <div className="flex items-start justify-between mb-3">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {type === 'pending' ? (
                 <Badge variant="secondary">Disponível</Badge>
               ) : (
@@ -328,11 +328,25 @@ export const RideCard = ({ ride, type, onUpdate }: RideCardProps) => {
                   {getStatusText(ride.status)}
                 </Badge>
               )}
+              {/* Badge Moto Negocia - detectar pela presença de oferta customizada */}
+              {ride.estimated_price && ride.estimated_price !== ride.actual_price && (
+                <Badge variant="outline" className="bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200 text-amber-800 dark:from-amber-900/20 dark:to-orange-900/20 dark:border-amber-700 dark:text-amber-300">
+                  Moto Negocia
+                </Badge>
+              )}
             </div>
             {ride.estimated_price && (
-              <span className="font-semibold text-primary text-lg">
-                R$ {ride.estimated_price.toFixed(2)}
-              </span>
+              <div className="text-right">
+                <span className="font-semibold text-primary text-lg">
+                  R$ {ride.estimated_price.toFixed(2)}
+                </span>
+                {/* Se é moto negocia, mostrar que é uma oferta */}
+                {ride.estimated_price && ride.estimated_price !== ride.actual_price && (
+                  <div className="text-xs text-muted-foreground">
+                    Oferta do passageiro
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
