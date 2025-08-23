@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { MapPin, Clock, User, Navigation, CheckCircle, Car, Phone, MessageCircle, Banknote, QrCode, CreditCard, XCircle } from 'lucide-react';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,6 +27,7 @@ export const RideCard = ({ ride, type, onUpdate }: RideCardProps) => {
   const [goingToPassengerLoading, setGoingToPassengerLoading] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [chatDialogOpen, setChatDialogOpen] = useState(false);
+  const [showAcceptDialog, setShowAcceptDialog] = useState(false);
 
   // Hook do chat (só ativar quando corrida está aceita/em andamento)
   const shouldEnableChat = type === 'accepted' && ['accepted', 'in_progress'].includes(ride.status);
@@ -441,7 +443,7 @@ export const RideCard = ({ ride, type, onUpdate }: RideCardProps) => {
           <div className="space-y-2">
             {type === 'pending' ? (
               <Button
-                onClick={handleAcceptRide}
+                onClick={() => setShowAcceptDialog(true)}
                 disabled={loading}
                 className="w-full bg-primary hover:bg-primary-dark"
                 size="sm"
@@ -576,6 +578,28 @@ export const RideCard = ({ ride, type, onUpdate }: RideCardProps) => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Modal de confirmação para aceitar corrida */}
+      <AlertDialog open={showAcceptDialog} onOpenChange={setShowAcceptDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Aceitar Corrida</AlertDialogTitle>
+            <AlertDialogDescription>
+              Você tem certeza que deseja aceitar esta corrida? Ao aceitar, você se compromete a realizar o transporte do passageiro.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleAcceptRide} disabled={loading}>
+              {loading ? (
+                <LoadingSpinner size="sm" />
+              ) : (
+                "Sim, Aceitar"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Chat Dialog para mototaxistas */}
       {shouldEnableChat && user && ride.profiles && (
