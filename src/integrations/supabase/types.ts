@@ -68,6 +68,41 @@ export type Database = {
         }
         Relationships: []
       }
+      driver_balances: {
+        Row: {
+          available: number
+          created_at: string
+          driver_id: string
+          reserved: number
+          total_earnings: number
+          updated_at: string
+        }
+        Insert: {
+          available?: number
+          created_at?: string
+          driver_id: string
+          reserved?: number
+          total_earnings?: number
+          updated_at?: string
+        }
+        Update: {
+          available?: number
+          created_at?: string
+          driver_id?: string
+          reserved?: number
+          total_earnings?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_balances_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       driver_details: {
         Row: {
           created_at: string | null
@@ -181,6 +216,56 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      fee_payments: {
+        Row: {
+          amount: number
+          canceled_at: string | null
+          canceled_reason: string | null
+          created_at: string
+          driver_id: string
+          id: string
+          initial_due_date: string
+          paid_at: string | null
+          payment_due_date: string | null
+          status: Database["public"]["Enums"]["fee_status"]
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          canceled_at?: string | null
+          canceled_reason?: string | null
+          created_at?: string
+          driver_id: string
+          id?: string
+          initial_due_date: string
+          paid_at?: string | null
+          payment_due_date?: string | null
+          status?: Database["public"]["Enums"]["fee_status"]
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          canceled_at?: string | null
+          canceled_reason?: string | null
+          created_at?: string
+          driver_id?: string
+          id?: string
+          initial_due_date?: string
+          paid_at?: string | null
+          payment_due_date?: string | null
+          status?: Database["public"]["Enums"]["fee_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fee_payments_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       locations: {
         Row: {
@@ -406,9 +491,68 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      calculate_driver_balance: {
+        Args: { p_driver_id: string }
+        Returns: {
+          available: number
+          created_at: string
+          driver_id: string
+          reserved: number
+          total_earnings: number
+          updated_at: string
+        }
+      }
+      cancel_fee: {
+        Args: { p_fee_id: string; p_reason: string }
+        Returns: {
+          amount: number
+          canceled_at: string | null
+          canceled_reason: string | null
+          created_at: string
+          driver_id: string
+          id: string
+          initial_due_date: string
+          paid_at: string | null
+          payment_due_date: string | null
+          status: Database["public"]["Enums"]["fee_status"]
+          updated_at: string
+        }
+      }
+      mark_fee_paid: {
+        Args: { p_fee_id: string }
+        Returns: {
+          amount: number
+          canceled_at: string | null
+          canceled_reason: string | null
+          created_at: string
+          driver_id: string
+          id: string
+          initial_due_date: string
+          paid_at: string | null
+          payment_due_date: string | null
+          status: Database["public"]["Enums"]["fee_status"]
+          updated_at: string
+        }
+      }
+      request_fee_payment: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          amount: number
+          canceled_at: string | null
+          canceled_reason: string | null
+          created_at: string
+          driver_id: string
+          id: string
+          initial_due_date: string
+          paid_at: string | null
+          payment_due_date: string | null
+          status: Database["public"]["Enums"]["fee_status"]
+          updated_at: string
+        }
+      }
     }
     Enums: {
+      fee_status: "not_requested" | "pending" | "paid" | "canceled" | "expired"
       payout_status: "pending" | "approved" | "rejected" | "paid"
     }
     CompositeTypes: {
@@ -537,6 +681,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      fee_status: ["not_requested", "pending", "paid", "canceled", "expired"],
       payout_status: ["pending", "approved", "rejected", "paid"],
     },
   },

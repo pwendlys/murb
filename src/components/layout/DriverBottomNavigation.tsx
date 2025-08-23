@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 const items = [
   { to: "/driver/map", label: "Mapa", icon: Map },
   { to: "/driver/rides", label: "Corridas", icon: Bike },
-  { to: "/driver/earnings", label: "Ganhos", icon: DollarSign },
+  { to: "/driver/earnings", label: "Taxas", icon: DollarSign },
   { to: "/driver/reviews", label: "Avaliações", icon: Star },
   { to: "/profile", label: "Perfil", icon: User },
 ];

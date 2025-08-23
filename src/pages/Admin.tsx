@@ -12,6 +12,7 @@ import UserManagement from '@/components/admin/UserManagement';
 import RideHistory from '@/components/admin/RideHistory';
 import EarningsHistory from '@/components/admin/EarningsHistory';
 import WithdrawalManagement from '@/components/admin/WithdrawalManagement';
+import { FeePaymentManagement } from '@/components/admin/fees/FeePaymentManagement';
 
 const Admin = () => {
   const { profile, loading, signOut } = useAuth();
@@ -47,7 +48,7 @@ const Admin = () => {
       <div className="flex justify-between items-start mb-6">
         <div className="text-center flex-1">
           <h1 className="text-3xl font-bold text-primary">Painel Administrativo</h1>
-          <p className="text-muted-foreground">Gerencie preços, usuários, corridas e saques</p>
+          <p className="text-muted-foreground">Gerencie preços, usuários, corridas, saques e taxas</p>
         </div>
         <Button 
           variant="outline" 
@@ -65,12 +66,13 @@ const Admin = () => {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="settings">
-            <TabsList className="grid grid-cols-5 w-full">
+            <TabsList className="grid grid-cols-6 w-full">
               <TabsTrigger value="settings">Configurações de Preço</TabsTrigger>
               <TabsTrigger value="users">Usuários</TabsTrigger>
               <TabsTrigger value="rides">Histórico de Corridas</TabsTrigger>
               <TabsTrigger value="earnings">Histórico de Ganhos</TabsTrigger>
               <TabsTrigger value="withdrawals">Gerenciar Saques</TabsTrigger>
+              <TabsTrigger value="fees">Cobrança de Taxas</TabsTrigger>
             </TabsList>
 
             <TabsContent value="settings" className="pt-4">
@@ -91,6 +93,10 @@ const Admin = () => {
 
             <TabsContent value="withdrawals" className="pt-4">
               <WithdrawalManagement />
+            </TabsContent>
+
+            <TabsContent value="fees" className="pt-4">
+              <FeePaymentManagement />
             </TabsContent>
           </Tabs>
         </CardContent>

@@ -3,18 +3,18 @@ import { useAuth } from '@/hooks/useAuth';
 import { AuthSelector } from '@/components/auth/AuthSelector';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { DriverBottomNavigation } from '@/components/layout/DriverBottomNavigation';
-import { DriverEarnings } from '@/components/driver/DriverEarnings';
+import { DriverFeePayments } from '@/components/driver/DriverFeePayments';
 
 export const DriverEarningsPage = () => {
   const { user, loading } = useAuth();
 
   // SEO Meta tags
   useEffect(() => {
-    document.title = 'Ganhos - RideBuddy Mototaxista';
+    document.title = 'Pagamento de Taxas - RideBuddy Mototaxista';
     
     const metaDescription = document.querySelector('meta[name="description"]');
     if (metaDescription) {
-      metaDescription.setAttribute('content', 'Gerencie seus ganhos, visualize saldo disponível e solicite saques como mototaxista.');
+      metaDescription.setAttribute('content', 'Gerencie pagamento de taxas, visualize saldos e prazos como mototaxista.');
     }
 
     const canonicalLink = document.querySelector('link[rel="canonical"]');
@@ -43,13 +43,13 @@ export const DriverEarningsPage = () => {
     <div className="min-h-screen bg-background pb-20">
       <main className="container mx-auto px-4 py-6">
         <header className="mb-6">
-          <h1 className="text-2xl font-bold text-foreground mb-2">Ganhos</h1>
+          <h1 className="text-2xl font-bold text-foreground mb-2">Pagamento de Taxas</h1>
           <p className="text-muted-foreground">
-            Gerencie seus ganhos e solicite saques
+            Gerencie suas obrigações de pagamento de taxa
           </p>
         </header>
 
-        <DriverEarnings />
+        <DriverFeePayments />
       </main>
 
       <DriverBottomNavigation />
