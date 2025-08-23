@@ -28,6 +28,7 @@ export const RideCard = ({ ride, type, onUpdate }: RideCardProps) => {
   const [cancelling, setCancelling] = useState(false);
   const [chatDialogOpen, setChatDialogOpen] = useState(false);
   const [showAcceptDialog, setShowAcceptDialog] = useState(false);
+  const [rideActiveModal, setRideActiveModal] = useState(false);
 
   // Hook do chat (só ativar quando corrida está aceita/em andamento)
   const shouldEnableChat = type === 'accepted' && ['accepted', 'in_progress'].includes(ride.status);
@@ -153,6 +154,11 @@ export const RideCard = ({ ride, type, onUpdate }: RideCardProps) => {
         .eq('id', ride.id)
         .eq('status', 'pending');
       if (error) throw error;
+      
+      // Mudar para modo bloqueante após aceitar
+      setShowAcceptDialog(false);
+      setRideActiveModal(true);
+      
       toast.success('Corrida aceita com sucesso!');
       onUpdate?.();
     } catch (error: any) {
@@ -182,6 +188,12 @@ export const RideCard = ({ ride, type, onUpdate }: RideCardProps) => {
         .update(updates)
         .eq('id', ride.id);
       if (error) throw error;
+      
+      // Fechar modal bloqueante quando corrida é finalizada
+      if (newStatus === 'completed') {
+        setRideActiveModal(false);
+      }
+      
       const statusText = {
         'completed': 'finalizada'
       }[newStatus] || 'atualizada';
@@ -247,6 +259,9 @@ export const RideCard = ({ ride, type, onUpdate }: RideCardProps) => {
         .eq('status', 'in_progress');
 
       if (error) throw error;
+      
+      // Fechar modal bloqueante quando corrida é cancelada
+      setRideActiveModal(false);
       
       toast.success('Corrida cancelada. A chamada voltou para a fila.');
       onUpdate?.();
@@ -598,6 +613,241 @@ export const RideCard = ({ ride, type, onUpdate }: RideCardProps) => {
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Modal bloqueante da corrida ativa */}
+      <AlertDialog open={rideActiveModal} onOpenChange={undefined}>
+        <AlertDialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-center">Corrida em Andamento</AlertDialogTitle>
+          </AlertDialogHeader>
+          
+          <div className="space-y-4">
+            {/* Status e preço */}
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant={getStatusVariant(ride.status)}>
+                  {getStatusText(ride.status)}
+                </Badge>
+                {ride.estimated_price && ride.estimated_price !== ride.actual_price && (
+                  <Badge variant="outline" className="bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200 text-amber-800 dark:from-amber-900/20 dark:to-orange-900/20 dark:border-amber-700 dark:text-amber-300">
+                    Moto Negocia
+                  </Badge>
+                )}
+              </div>
+              {ride.estimated_price && (
+                <div className="text-right">
+                  <span className="font-semibold text-primary text-lg">
+                    R$ {ride.estimated_price.toFixed(2)}
+                  </span>
+                  {ride.estimated_price && ride.estimated_price !== ride.actual_price && (
+                    <div className="text-xs text-muted-foreground">
+                      Oferta do passageiro
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Informações do passageiro */}
+            {ride.profiles && (
+              <>
+                <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
+                  <Avatar className="h-12 w-12">
+                    <AvatarImage 
+                      src={ride.profiles?.avatar_url || undefined} 
+                      alt={ride.profiles?.full_name || 'Passageiro'} 
+                    />
+                    <AvatarFallback className="bg-primary/10 text-primary font-medium">
+                      {ride.profiles?.full_name ? ride.profiles.full_name.split(' ').map(n => n[0]).join('').toUpperCase() : 'P'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">Passageiro</p>
+                      {user && (
+                        <ChatButton
+                          unreadCount={unreadCount}
+                          onClick={() => setChatDialogOpen(true)}
+                        />
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">{ride.profiles?.full_name}</p>
+                    {ride.profiles?.phone && (
+                      <p className="text-sm text-muted-foreground">{ride.profiles.phone}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Método de pagamento */}
+                <div className="p-3 bg-muted/20 rounded-lg border border-border/30">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Pagamento:</span>
+                    <div className="inline-flex items-center gap-1 px-2 py-1 rounded bg-background text-xs border border-border/50">
+                      {paymentDisplay.icon}
+                      <span className="font-medium">{paymentDisplay.label}</span>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Endereços */}
+            <div className="space-y-3">
+              <div className="flex items-start gap-2">
+                <MapPin className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="text-sm text-muted-foreground">De:</span>
+                  <p className="text-sm font-medium">{ride.origin_address}</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <MapPin className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="text-sm text-muted-foreground">Para:</span>
+                  <p className="text-sm font-medium">{ride.destination_address}</p>
+                </div>
+              </div>
+              {(ride.estimated_distance || ride.estimated_duration) && (
+                <div className="flex items-center gap-4 pt-1">
+                  {ride.estimated_distance && (
+                    <div className="flex items-center gap-1">
+                      <Navigation className="w-3 h-3 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">
+                        {ride.estimated_distance} km
+                      </span>
+                    </div>
+                  )}
+                  {ride.estimated_duration && (
+                    <div className="flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">
+                        {ride.estimated_duration} min
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Botões de ação */}
+            <div className="space-y-2">
+              {ride.status === 'in_progress' && (
+                <div className="flex gap-2">
+                  {!ride.driver_arrived ? (
+                    <>
+                      <Button
+                        onClick={handleGoToPassenger}
+                        disabled={goingToPassengerLoading}
+                        size="sm"
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                      >
+                        {goingToPassengerLoading ? (
+                          <LoadingSpinner size="sm" />
+                        ) : (
+                          <>
+                            <User className="w-4 h-4 mr-2" />
+                            Ir Até Passageiro
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        onClick={handleDriverArrived}
+                        disabled={loading}
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                      >
+                        {loading ? (
+                          <LoadingSpinner size="sm" />
+                        ) : (
+                          <>
+                            <CheckCircle className="w-4 h-4 mr-2" />
+                            Cheguei
+                          </>
+                        )}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        onClick={handleGoToMaps}
+                        size="sm"
+                        className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                      >
+                        <Navigation className="w-4 h-4 mr-2" />
+                        Ir Agora
+                      </Button>
+                      <Button
+                        onClick={() => handleUpdateStatus('completed')}
+                        disabled={loading}
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                      >
+                        {loading ? (
+                          <LoadingSpinner size="sm" />
+                        ) : (
+                          <>
+                            <CheckCircle className="w-4 h-4 mr-2" />
+                            Finalizar
+                          </>
+                        )}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {ride.status === 'in_progress' && !ride.driver_arrived && (
+                <Button
+                  onClick={handleCancelRide}
+                  disabled={cancelling || goingToPassengerLoading || loading}
+                  size="sm"
+                  variant="destructive"
+                  className="w-full"
+                >
+                  {cancelling ? (
+                    <LoadingSpinner size="sm" />
+                  ) : (
+                    <>
+                      <XCircle className="w-4 h-4 mr-2" />
+                      Cancelar Corrida
+                    </>
+                  )}
+                </Button>
+              )}
+
+              {/* Botões de contato */}
+              {ride.profiles?.phone && (
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => window.open(`tel:${ride.profiles?.phone}`)}
+                  >
+                    <Phone className="w-4 h-4 mr-2" />
+                    Ligar
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => window.open(`sms:${ride.profiles?.phone}`)}
+                  >
+                    <MessageCircle className="w-4 h-4 mr-2" />
+                    SMS
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            <div className="text-xs text-muted-foreground text-center pt-2 border-t">
+              Criada em: {new Date(ride.created_at).toLocaleString('pt-BR')}
+            </div>
+          </div>
         </AlertDialogContent>
       </AlertDialog>
 
