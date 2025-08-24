@@ -366,7 +366,7 @@ export const DriverTrackingDialog: React.FC<DriverTrackingDialogProps> = ({
                 heading: driverLocation.heading
               } : undefined}
               className="w-full h-full"
-              driverIconUrl="https://drive.google.com/uc?export=view&id=1e4yVY0gNwn2tyTfrdIUrr88nmXXqJa3m"
+              driverIconUrl="/motorcycle-icon.png"
               showDriverToOriginRoute={shouldShowDriverToOriginRoute()}
               driverRouteTarget={getDriverRouteTarget()}
             />
