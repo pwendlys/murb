@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { RideRequest } from './RideRequest';
 import { RateDriverDialog } from './RateDriverDialog';
 import { GoogleMap } from '@/components/ui/google-map';
-import { MapPin, Clock, Car, CheckCircle, XCircle, Map, Star, X } from 'lucide-react';
+import { MapPin, Clock, Bike, CheckCircle, XCircle, Map, Star, X } from 'lucide-react';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { Ride, RideStatus, Profile, LocationCoords, DriverDetails } from '@/types';
 import { toast } from 'sonner';
@@ -239,7 +239,7 @@ export const PassengerDashboard = () => {
         return <Clock className="w-4 h-4 animate-spin" />;
       case 'accepted':
       case 'in_progress':
-        return <Car className="w-4 h-4" />;
+        return <Bike className="w-4 h-4" />;
       case 'completed':
         return <CheckCircle className="w-4 h-4" />;
       case 'cancelled':
@@ -346,7 +346,7 @@ export const PassengerDashboard = () => {
           <Card className="shadow-ride-card border-0">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Car className="w-5 h-5 text-primary" />
+                <Bike className="w-5 h-5 text-primary" />
                 Suas Corridas
               </CardTitle>
             </CardHeader>
@@ -357,7 +357,7 @@ export const PassengerDashboard = () => {
                 </div>
               ) : rides.length === 0 ? (
                 <div className="text-center py-8">
-                  <Car className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <Bike className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                   <p className="text-muted-foreground">Nenhuma corrida encontrada</p>
                 </div>
               ) : (
@@ -430,14 +430,14 @@ export const PassengerDashboard = () => {
                         
                         {ride.profiles && (
                           <div className="flex items-center gap-2 text-primary">
-                            <Car className="w-3 h-3" />
+                            <Bike className="w-3 h-3" />
                             <span>Mototaxista: {ride.profiles.full_name}</span>
                           </div>
                         )}
 
                         {ride.driver_details && (
                           <div className="flex items-center gap-2 text-muted-foreground">
-                            <Car className="w-3 h-3" />
+                            <Bike className="w-3 h-3" />
                             <span>
                               Veículo: {[
                                 ride.driver_details.vehicle_brand,

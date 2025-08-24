@@ -9,7 +9,7 @@ import {
   MapPin, 
   Navigation, 
   Clock, 
-  Car,
+  Bike,
   X,
   RefreshCw,
   AlertTriangle
@@ -256,7 +256,7 @@ export const DriverTrackingDialog: React.FC<DriverTrackingDialogProps> = ({
         <DialogHeader className="px-3 pb-0 pt-[calc(env(safe-area-inset-top)+12px)] flex-shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Car className="w-4 h-4 text-primary" />
+              <Bike className="w-4 h-4 text-primary" />
               <div>
                 <div className="flex items-center gap-2">
                   <DialogTitle className="text-base">{driverName}</DialogTitle>

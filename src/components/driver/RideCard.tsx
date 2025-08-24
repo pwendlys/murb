@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { MapPin, Clock, User, Navigation, CheckCircle, Car, Phone, MessageCircle, Banknote, QrCode, CreditCard, XCircle } from 'lucide-react';
+import { MapPin, Clock, User, Navigation, CheckCircle, Bike, Phone, MessageCircle, Banknote, QrCode, CreditCard, XCircle } from 'lucide-react';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -467,7 +467,7 @@ export const RideCard = ({ ride, type, onUpdate }: RideCardProps) => {
                   <LoadingSpinner size="sm" />
                 ) : (
                   <>
-                    <Car className="w-4 h-4 mr-2" />
+                    <Bike className="w-4 h-4 mr-2" />
                     Aceitar Corrida
                   </>
                 )}

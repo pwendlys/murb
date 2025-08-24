@@ -6,7 +6,7 @@ import { Ride } from '@/types';
 import { 
   Clock, 
   CheckCircle, 
-  Car, 
+  Bike, 
   MapPin, 
   Navigation, 
   DollarSign, 
@@ -274,7 +274,7 @@ export const ActiveRideTracking: React.FC<ActiveRideTrackingProps> = ({ ride, on
                     
                     {ride.driver_details && (
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Car className="w-3 h-3" />
+                        <Bike className="w-3 h-3" />
                         <span>
                           {ride.driver_details.vehicle_brand} {ride.driver_details.vehicle_model}
                           {ride.driver_details.vehicle_color && ` • ${ride.driver_details.vehicle_color}`}

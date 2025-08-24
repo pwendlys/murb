@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { RateDriverDialog } from '@/components/passenger/RateDriverDialog';
-import { MapPin, Clock, Car, CheckCircle, XCircle, Star, X } from 'lucide-react';
+import { MapPin, Clock, Bike, CheckCircle, XCircle, Star, X } from 'lucide-react';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { Ride, RideStatus, Profile, DriverDetails } from '@/types';
 import { toast } from 'sonner';
@@ -227,7 +227,7 @@ const RidesPage = () => {
         return <Clock className="w-4 h-4 animate-spin" />;
       case 'accepted':
       case 'in_progress':
-        return <Car className="w-4 h-4" />;
+        return <Bike className="w-4 h-4" />;
       case 'completed':
         return <CheckCircle className="w-4 h-4" />;
       case 'cancelled':
@@ -293,7 +293,7 @@ const RidesPage = () => {
         <Card className="shadow-ride-card border-0">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Car className="w-5 h-5 text-primary" />
+              <Bike className="w-5 h-5 text-primary" />
               Histórico de Corridas
             </CardTitle>
           </CardHeader>
@@ -304,7 +304,7 @@ const RidesPage = () => {
               </div>
             ) : rides.length === 0 ? (
               <div className="text-center py-12">
-                <Car className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                <Bike className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
                 <p className="text-muted-foreground text-lg">Nenhuma corrida encontrada</p>
                 <p className="text-sm text-muted-foreground mt-2">Suas corridas aparecerão aqui</p>
               </div>
@@ -386,7 +386,7 @@ const RidesPage = () => {
 
                       {ride.driver_details && (
                         <div className="flex items-center gap-2 text-muted-foreground">
-                          <Car className="w-4 h-4" />
+                        <Bike className="w-4 h-4" />
                           <span>
                             Veículo: {[
                               ride.driver_details.vehicle_brand,
