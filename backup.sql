@@ -28,6 +28,13 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- Tipo para status de taxas de motoristas
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'fee_status') THEN
+    CREATE TYPE public.fee_status AS ENUM ('not_requested', 'pending', 'paid', 'canceled', 'expired');
+  END IF;
+END $$;
+
 -- =============================================================================
 -- FUNÇÕES UTILITÁRIAS
 -- =============================================================================
@@ -64,7 +71,11 @@ DO $$ BEGIN
         NEW.id,
         COALESCE(NEW.raw_user_meta_data->>'full_name', 'Usuário'),
         COALESCE(NEW.raw_user_meta_data->>'user_type', 'passenger'),
-        TRUE,
+        -- Mototaxistas precisam ser aprovados, então começam inativos
+        CASE 
+          WHEN COALESCE(NEW.raw_user_meta_data->>'user_type', 'passenger') = 'driver' THEN FALSE
+          ELSE TRUE
+        END,
         NOW(),
         NOW()
       )
@@ -663,6 +674,119 @@ DO $$ BEGIN
 END $$;
 
 -- -----------------------------------------------------------------------------
+-- Tabela: driver_balances (Saldos dos motoristas)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.driver_balances (
+  driver_id UUID NOT NULL PRIMARY KEY,
+  total_earnings NUMERIC NOT NULL DEFAULT 0,
+  available NUMERIC NOT NULL DEFAULT 0,  -- disponível para reserva
+  reserved NUMERIC NOT NULL DEFAULT 0,   -- reservado para taxas
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- RLS para driver_balances
+ALTER TABLE public.driver_balances ENABLE ROW LEVEL SECURITY;
+
+-- Políticas RLS para driver_balances
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='balances_driver_select' AND tablename='driver_balances') THEN
+    CREATE POLICY "balances_driver_select"
+      ON public.driver_balances
+      FOR SELECT
+      USING (driver_id = auth.uid());
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='balances_admin_full' AND tablename='driver_balances') THEN
+    CREATE POLICY "balances_admin_full"
+      ON public.driver_balances
+      FOR ALL
+      USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.user_type = 'admin'))
+      WITH CHECK (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.user_type = 'admin'));
+  END IF;
+END $$;
+
+-- Trigger para updated_at em driver_balances
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='driver_balances_set_updated_at') THEN
+    CREATE TRIGGER driver_balances_set_updated_at
+      BEFORE UPDATE ON public.driver_balances
+      FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+  END IF;
+END $$;
+
+-- -----------------------------------------------------------------------------
+-- Tabela: fee_payments (Pagamentos de taxas)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.fee_payments (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  driver_id UUID NOT NULL,
+  amount NUMERIC NOT NULL,
+  status public.fee_status NOT NULL DEFAULT 'not_requested',
+  initial_due_date TIMESTAMPTZ NOT NULL,  -- 2 dias após primeiro acesso
+  payment_due_date TIMESTAMPTZ,  -- 2 dias após solicitação
+  paid_at TIMESTAMPTZ,
+  canceled_at TIMESTAMPTZ,
+  canceled_reason TEXT,
+  available_balance_before NUMERIC DEFAULT 0, -- Saldo antes da solicitação
+  actual_fee_amount NUMERIC DEFAULT 0, -- Valor real da taxa
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- RLS para fee_payments
+ALTER TABLE public.fee_payments ENABLE ROW LEVEL SECURITY;
+
+-- Políticas RLS para fee_payments
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='fee_driver_select' AND tablename='fee_payments') THEN
+    CREATE POLICY "fee_driver_select"
+      ON public.fee_payments
+      FOR SELECT
+      USING (driver_id = auth.uid());
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='fee_driver_insert' AND tablename='fee_payments') THEN
+    CREATE POLICY "fee_driver_insert"
+      ON public.fee_payments
+      FOR INSERT
+      WITH CHECK (driver_id = auth.uid());
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='fee_driver_update_restrict' AND tablename='fee_payments') THEN
+    CREATE POLICY "fee_driver_update_restrict"
+      ON public.fee_payments
+      FOR UPDATE
+      USING (FALSE);
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='fee_admin_full' AND tablename='fee_payments') THEN
+    CREATE POLICY "fee_admin_full"
+      ON public.fee_payments
+      FOR ALL
+      USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.user_type = 'admin'))
+      WITH CHECK (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.user_type = 'admin'));
+  END IF;
+END $$;
+
+-- Trigger para updated_at em fee_payments
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='fee_payments_set_updated_at') THEN
+    CREATE TRIGGER fee_payments_set_updated_at
+      BEFORE UPDATE ON public.fee_payments
+      FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+  END IF;
+END $$;
+
+-- -----------------------------------------------------------------------------
 -- Tabela: chat_messages (Mensagens de chat entre motoristas e passageiros)
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.chat_messages (
@@ -759,6 +883,8 @@ CREATE INDEX IF NOT EXISTS idx_driver_passenger_ratings_passenger_id ON public.d
 ALTER TABLE public.locations REPLICA IDENTITY FULL;
 ALTER TABLE public.rides REPLICA IDENTITY FULL;
 ALTER TABLE public.chat_messages REPLICA IDENTITY FULL;
+ALTER TABLE public.driver_balances REPLICA IDENTITY FULL;
+ALTER TABLE public.fee_payments REPLICA IDENTITY FULL;
 
 -- Adicionar tabelas à publicação realtime
 DO $$ BEGIN
@@ -782,6 +908,22 @@ DO $$ BEGIN
     SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='chat_messages'
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.chat_messages;
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='driver_balances'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.driver_balances;
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='fee_payments'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.fee_payments;
   END IF;
 END $$;
 
@@ -843,6 +985,359 @@ DO $$ BEGIN
 END $$;
 
 -- =============================================================================
+-- FUNÇÕES CRÍTICAS DO SISTEMA
+-- =============================================================================
+
+-- Função para calcular saldo do motorista
+CREATE OR REPLACE FUNCTION public.calculate_driver_balance(p_driver_id uuid)
+RETURNS public.driver_balances
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_balance public.driver_balances;
+  v_total_earnings numeric(14,2) := 0;
+  v_paid_withdrawals numeric(14,2) := 0;
+  v_paid_fees numeric(14,2) := 0;
+  v_reserved numeric(14,2) := 0;
+BEGIN
+  -- Calcula total de ganhos das corridas completadas
+  SELECT COALESCE(SUM(COALESCE(actual_price, estimated_price)), 0)
+  INTO v_total_earnings
+  FROM public.rides
+  WHERE driver_id = p_driver_id AND status = 'completed';
+
+  -- Calcula total de saques pagos
+  SELECT COALESCE(SUM(amount), 0)
+  INTO v_paid_withdrawals
+  FROM public.driver_payout_requests
+  WHERE driver_id = p_driver_id AND status = 'paid';
+
+  -- Calcula total de taxas pagas (NOVA DEDUÇÃO)
+  SELECT COALESCE(SUM(amount), 0)
+  INTO v_paid_fees
+  FROM public.fee_payments
+  WHERE driver_id = p_driver_id AND status = 'paid';
+
+  -- Calcula reservado para taxas pendentes/expiradas
+  SELECT COALESCE(SUM(amount), 0)
+  INTO v_reserved
+  FROM public.fee_payments
+  WHERE driver_id = p_driver_id AND status IN ('pending', 'expired');
+
+  -- Insere ou atualiza saldo: disponível = ganhos - saques pagos - taxas pagas - reservado
+  INSERT INTO public.driver_balances (driver_id, total_earnings, available, reserved)
+  VALUES (p_driver_id, v_total_earnings, GREATEST(0, v_total_earnings - v_paid_withdrawals - v_paid_fees - v_reserved), v_reserved)
+  ON CONFLICT (driver_id) DO UPDATE SET
+    total_earnings = EXCLUDED.total_earnings,
+    available = GREATEST(0, EXCLUDED.total_earnings - v_paid_withdrawals - v_paid_fees - EXCLUDED.reserved),
+    reserved = EXCLUDED.reserved,
+    updated_at = now()
+  RETURNING * INTO v_balance;
+
+  RETURN v_balance;
+END
+$$;
+
+-- Função para calcular taxa de serviço
+CREATE OR REPLACE FUNCTION public.calculate_service_fee(p_driver_id uuid, p_available_balance numeric)
+RETURNS numeric
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_settings record;
+  v_fee_amount numeric(14,2) := 0;
+BEGIN
+  -- Buscar configurações de preço mais recentes
+  SELECT service_fee_type, service_fee_value
+  INTO v_settings
+  FROM public.pricing_settings
+  ORDER BY created_at DESC
+  LIMIT 1;
+  
+  -- Se não houver configurações, retorna 0
+  IF NOT FOUND OR v_settings.service_fee_value IS NULL THEN
+    RETURN 0;
+  END IF;
+  
+  -- Calcular taxa baseada no tipo
+  IF v_settings.service_fee_type = 'fixed' THEN
+    v_fee_amount := v_settings.service_fee_value;
+  ELSIF v_settings.service_fee_type = 'percent' THEN
+    -- Calcular porcentagem sobre o saldo disponível
+    v_fee_amount := p_available_balance * (v_settings.service_fee_value / 100);
+  END IF;
+  
+  -- Garantir que não seja negativo e não exceda o saldo disponível
+  RETURN GREATEST(0, LEAST(v_fee_amount, p_available_balance));
+END
+$$;
+
+-- Função para solicitar pagamento de taxa
+CREATE OR REPLACE FUNCTION public.request_fee_payment()
+RETURNS public.fee_payments
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_driver_id uuid := auth.uid();
+  v_balance public.driver_balances;
+  v_payment public.fee_payments;
+  v_profile_created_at timestamptz;
+  v_now timestamptz := now();
+  v_fee_amount numeric(14,2);
+  v_initial_due_date timestamptz;
+  v_available_balance numeric(14,2);
+BEGIN
+  IF v_driver_id IS NULL THEN
+    RAISE EXCEPTION 'not_authenticated';
+  END IF;
+
+  -- Verifica se é um motorista
+  IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = v_driver_id AND user_type = 'driver') THEN
+    RAISE EXCEPTION 'not_a_driver';
+  END IF;
+
+  -- Busca data de criação do perfil
+  SELECT created_at INTO v_profile_created_at
+  FROM public.profiles
+  WHERE id = v_driver_id;
+
+  v_initial_due_date := v_profile_created_at + interval '2 days';
+
+  -- Verifica se ainda está no prazo para solicitar (2 dias após cadastro)
+  IF v_now > v_initial_due_date THEN
+    RAISE EXCEPTION 'initial_deadline_expired';
+  END IF;
+
+  -- Calcula e obtém saldo atual
+  SELECT * INTO v_balance FROM public.calculate_driver_balance(v_driver_id);
+  v_available_balance := v_balance.available;
+
+  -- Verifica se tem saldo disponível
+  IF v_available_balance <= 0 THEN
+    RAISE EXCEPTION 'no_available_funds';
+  END IF;
+
+  -- Calcula taxa baseada no saldo disponível
+  v_fee_amount := public.calculate_service_fee(v_driver_id, v_available_balance);
+  
+  -- Verifica se a taxa calculada é maior que zero
+  IF v_fee_amount <= 0 THEN
+    RAISE EXCEPTION 'invalid_fee_amount';
+  END IF;
+
+  -- NOVA LÓGICA: Zerar todo o saldo disponível
+  -- Todo o saldo disponível vai para reservado, mas só a taxa é paga
+  UPDATE public.driver_balances
+  SET available = 0,
+      reserved = reserved + v_available_balance
+  WHERE driver_id = v_driver_id;
+
+  -- Cria fee_payment com informações detalhadas
+  INSERT INTO public.fee_payments (
+    driver_id, 
+    amount, 
+    status, 
+    initial_due_date, 
+    payment_due_date,
+    available_balance_before,
+    actual_fee_amount
+  )
+  VALUES (
+    v_driver_id, 
+    v_available_balance,  -- O valor total reservado é o saldo disponível
+    'pending', 
+    v_initial_due_date, 
+    v_now + interval '2 days',
+    v_available_balance,  -- Saldo antes da solicitação
+    v_fee_amount          -- Valor real da taxa
+  )
+  RETURNING * INTO v_payment;
+
+  RETURN v_payment;
+END
+$$;
+
+-- Função para marcar taxa como paga
+CREATE OR REPLACE FUNCTION public.mark_fee_paid(p_fee_id uuid)
+RETURNS public.fee_payments
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_payment public.fee_payments;
+BEGIN
+  -- Verifica se é admin
+  IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND user_type = 'admin') THEN
+    RAISE EXCEPTION 'unauthorized';
+  END IF;
+
+  SELECT * INTO v_payment FROM public.fee_payments WHERE id = p_fee_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'fee_not_found'; END IF;
+  
+  IF v_payment.status NOT IN ('pending', 'expired') THEN
+    RAISE EXCEPTION 'invalid_status';
+  END IF;
+
+  -- Liberar apenas o que sobrou após deduzir a taxa
+  -- amount = saldo total reservado, actual_fee_amount = taxa paga
+  UPDATE public.driver_balances
+  SET reserved = GREATEST(reserved - v_payment.amount, 0),
+      available = available + GREATEST(v_payment.amount - v_payment.actual_fee_amount, 0)
+  WHERE driver_id = v_payment.driver_id;
+
+  UPDATE public.fee_payments
+  SET status = 'paid',
+      paid_at = now()
+  WHERE id = p_fee_id
+  RETURNING * INTO v_payment;
+
+  RETURN v_payment;
+END
+$$;
+
+-- Função para cancelar taxa
+CREATE OR REPLACE FUNCTION public.cancel_fee(p_fee_id uuid, p_reason text)
+RETURNS public.fee_payments
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_payment public.fee_payments;
+BEGIN
+  -- Verifica se é admin
+  IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND user_type = 'admin') THEN
+    RAISE EXCEPTION 'unauthorized';
+  END IF;
+
+  SELECT * INTO v_payment FROM public.fee_payments WHERE id = p_fee_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'fee_not_found'; END IF;
+  
+  IF v_payment.status NOT IN ('pending', 'expired') THEN
+    RAISE EXCEPTION 'invalid_status';
+  END IF;
+
+  -- Reverte a reserva para available
+  UPDATE public.driver_balances
+  SET reserved  = GREATEST(reserved - v_payment.amount, 0),
+      available = available + v_payment.amount
+  WHERE driver_id = v_payment.driver_id;
+
+  UPDATE public.fee_payments
+  SET status          = 'canceled',
+      canceled_at     = now(),
+      canceled_reason = p_reason
+  WHERE id = p_fee_id
+  RETURNING * INTO v_payment;
+
+  RETURN v_payment;
+END
+$$;
+
+-- Função trigger para atualizar saldo quando status de taxa muda
+CREATE OR REPLACE FUNCTION public.update_driver_balance_on_fee_status_change()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+BEGIN
+  -- Recalcular saldo quando status da taxa mudar para 'paid' ou 'canceled'
+  IF (NEW.status != OLD.status) AND (NEW.status IN ('paid', 'canceled')) THEN
+    PERFORM public.calculate_driver_balance(NEW.driver_id);
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+-- Função trigger para atualizar saldo quando corrida é completada
+CREATE OR REPLACE FUNCTION public.update_driver_balance_on_ride_completion()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+BEGIN
+  -- Se mudou para 'completed', atualiza o saldo do motorista
+  IF NEW.status = 'completed' AND OLD.status != 'completed' AND NEW.driver_id IS NOT NULL THEN
+    PERFORM public.calculate_driver_balance(NEW.driver_id);
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+-- Função trigger para definir preço real automaticamente
+CREATE OR REPLACE FUNCTION public.set_actual_price_on_completion()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+BEGIN
+  -- Se a corrida está sendo marcada como completed e não tem actual_price definido
+  IF NEW.status = 'completed' AND OLD.status != 'completed' AND NEW.actual_price IS NULL THEN
+    NEW.actual_price = NEW.estimated_price;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+-- Função trigger alternativa para atualização de saldo após completar corrida
+CREATE OR REPLACE FUNCTION public.update_driver_balance_on_completion()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+BEGIN
+  -- Se a corrida foi marcada como completed e tem driver_id
+  IF NEW.status = 'completed' AND OLD.status != 'completed' AND NEW.driver_id IS NOT NULL THEN
+    -- Chama a função para recalcular saldos
+    PERFORM public.calculate_driver_balance(NEW.driver_id);
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+-- =============================================================================
+-- TRIGGERS DO SISTEMA
+-- =============================================================================
+
+-- Trigger para definir preço real antes de completar corrida
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='set_actual_price_before_completion') THEN
+    CREATE TRIGGER set_actual_price_before_completion
+      BEFORE UPDATE ON public.rides
+      FOR EACH ROW EXECUTE FUNCTION public.set_actual_price_on_completion();
+  END IF;
+END $$;
+
+-- Trigger para atualizar saldo após completar corrida
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='update_balance_after_completion') THEN
+    CREATE TRIGGER update_balance_after_completion
+      AFTER UPDATE ON public.rides
+      FOR EACH ROW EXECUTE FUNCTION public.update_driver_balance_on_completion();
+  END IF;
+END $$;
+
+-- Trigger para atualizar saldo quando status de fee muda
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='update_balance_on_fee_change') THEN
+    CREATE TRIGGER update_balance_on_fee_change
+      AFTER UPDATE ON public.fee_payments
+      FOR EACH ROW EXECUTE FUNCTION public.update_driver_balance_on_fee_status_change();
+  END IF;
+END $$;
+
+-- =============================================================================
 -- DADOS INICIAIS (SEED DATA)
 -- =============================================================================
 
@@ -866,6 +1361,8 @@ COMMENT ON TABLE public.driver_payout_requests IS 'Solicitações de pagamento d
 COMMENT ON TABLE public.ride_ratings IS 'Avaliações dos passageiros sobre os motoristas';
 COMMENT ON TABLE public.driver_passenger_ratings IS 'Avaliações dos motoristas sobre os passageiros';
 COMMENT ON TABLE public.admin_setup IS 'Configuração inicial do sistema para administradores';
+COMMENT ON TABLE public.driver_balances IS 'Sistema de saldos e controle financeiro dos motoristas';
+COMMENT ON TABLE public.fee_payments IS 'Sistema de pagamento de taxas de serviço dos motoristas';
 
 -- Verificação de integridade
 DO $$
@@ -874,21 +1371,27 @@ DECLARE
     function_count INTEGER;
     trigger_count INTEGER;
 BEGIN
-    -- Contar tabelas criadas
+    -- Contar tabelas criadas (agora são 12 tabelas)
     SELECT COUNT(*) INTO table_count 
     FROM information_schema.tables 
     WHERE table_schema = 'public' 
     AND table_name IN (
         'profiles', 'admin_setup', 'driver_details', 'pricing_settings', 
         'locations', 'rides', 'ride_ratings', 'driver_passenger_ratings', 
-        'driver_payout_requests', 'chat_messages'
+        'driver_payout_requests', 'chat_messages', 'driver_balances', 'fee_payments'
     );
     
-    -- Contar funções criadas
+    -- Contar funções criadas (agora são 11 funções)
     SELECT COUNT(*) INTO function_count 
     FROM information_schema.routines 
     WHERE routine_schema = 'public' 
-    AND routine_name IN ('set_updated_at', 'handle_new_user');
+    AND routine_name IN (
+        'set_updated_at', 'handle_new_user', 'calculate_driver_balance', 
+        'calculate_service_fee', 'request_fee_payment', 'mark_fee_paid', 
+        'cancel_fee', 'update_driver_balance_on_fee_status_change',
+        'update_driver_balance_on_ride_completion', 'set_actual_price_on_completion',
+        'update_driver_balance_on_completion'
+    );
     
     -- Contar triggers criados
     SELECT COUNT(*) INTO trigger_count 
@@ -896,15 +1399,19 @@ BEGIN
     WHERE trigger_schema = 'public';
     
     -- Relatório de verificação
-    RAISE NOTICE '=== VERIFICAÇÃO DE MIGRAÇÃO ===';
-    RAISE NOTICE 'Tabelas criadas: % de 10 esperadas', table_count;
-    RAISE NOTICE 'Funções criadas: % de 2 esperadas', function_count;
+    RAISE NOTICE '=== VERIFICAÇÃO DE MIGRAÇÃO COMPLETA ===';
+    RAISE NOTICE 'Tabelas criadas: % de 12 esperadas', table_count;
+    RAISE NOTICE 'Funções criadas: % de 11 esperadas', function_count;
     RAISE NOTICE 'Triggers criados: % triggers', trigger_count;
     
-    IF table_count = 10 AND function_count = 2 THEN
-        RAISE NOTICE '✅ Migração executada com SUCESSO!';
+    IF table_count = 12 AND function_count = 11 THEN
+        RAISE NOTICE '✅ Migração executada com SUCESSO COMPLETO!';
+        RAISE NOTICE '✅ Sistema de fees e saldos configurado!';
+        RAISE NOTICE '✅ Todas as funções críticas implementadas!';
     ELSE
         RAISE WARNING '⚠️  Verifique se todas as tabelas e funções foram criadas corretamente';
+        RAISE NOTICE 'Esperado: 12 tabelas, % encontradas', table_count;
+        RAISE NOTICE 'Esperado: 11 funções, % encontradas', function_count;
     END IF;
 END $$;
 
@@ -913,15 +1420,21 @@ END $$;
 -- =============================================================================
 
 -- Este backup contém:
--- ✅ 10 tabelas principais do sistema
--- ✅ Todas as políticas RLS necessárias
--- ✅ Triggers para updated_at automático
--- ✅ Função para criação automática de perfis
+-- ✅ 12 tabelas principais do sistema (incluindo driver_balances e fee_payments)
+-- ✅ 2 tipos customizados (payout_status e fee_status)
+-- ✅ 11 funções críticas do sistema incluindo:
+--   • Funções utilitárias (set_updated_at, handle_new_user)
+--   • Sistema de saldos (calculate_driver_balance, calculate_service_fee)
+--   • Sistema de fees (request_fee_payment, mark_fee_paid, cancel_fee)  
+--   • Triggers functions (update_driver_balance_*, set_actual_price_*)
+-- ✅ Todas as políticas RLS necessárias para segurança
+-- ✅ Triggers para updated_at automático e atualizações de saldo
 -- ✅ Índices para otimização de performance
--- ✅ Configurações de tempo real (realtime)
--- ✅ Bucket de storage para avatars
+-- ✅ Configurações de tempo real (realtime) para todas as tabelas críticas
+-- ✅ Bucket de storage para avatars com políticas apropriadas
+-- ✅ Sistema completo de fees e saldos operacional
 -- ✅ Dados iniciais (seed data)
--- ✅ Verificação de integridade
--- ✅ Comentários e documentação
+-- ✅ Verificação de integridade completa
+-- ✅ Comentários e documentação detalhada
 
-SELECT 'Backup completo do banco de dados criado com sucesso! 🚀' AS status;
+SELECT 'Backup COMPLETO do banco de dados criado com sucesso! Sistema de fees implementado! 🚀' AS status;
