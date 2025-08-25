@@ -41,11 +41,15 @@ export const useActiveRide = () => {
             .single();
           
           // Fetch driver details
-          const { data: driverDetails } = await supabase
+          const { data: driverDetails, error: driverDetailsError } = await supabase
             .from('driver_details')
             .select('vehicle_brand, vehicle_model, vehicle_color, vehicle_plate')
             .eq('user_id', data.driver_id)
-            .single();
+            .maybeSingle();
+          
+          if (driverDetailsError) {
+            console.error('Error fetching driver details:', driverDetailsError);
+          }
           
           rideWithDetails.profiles = driverProfile;
           rideWithDetails.driver_details = driverDetails;
