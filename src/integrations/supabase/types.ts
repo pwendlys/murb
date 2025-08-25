@@ -267,6 +267,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "driver_subscriptions_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "driver_subscriptions_plan_id_fkey"
             columns: ["plan_id"]
             isOneToOne: false
@@ -615,6 +622,13 @@ export type Database = {
             columns: ["current_subscription_id"]
             isOneToOne: false
             referencedRelation: "driver_subscriptions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscription_requests_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
