@@ -14,7 +14,438 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      admin_setup: {
+        Row: {
+          admin_user_id: string
+          created_at: string | null
+          password_set: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          admin_user_id: string
+          created_at?: string | null
+          password_set?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          admin_user_id?: string
+          created_at?: string | null
+          password_set?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      driver_balances: {
+        Row: {
+          available: number | null
+          created_at: string | null
+          driver_id: string
+          reserved: number | null
+          total_earnings: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          available?: number | null
+          created_at?: string | null
+          driver_id: string
+          reserved?: number | null
+          total_earnings?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          available?: number | null
+          created_at?: string | null
+          driver_id?: string
+          reserved?: number | null
+          total_earnings?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      driver_details: {
+        Row: {
+          created_at: string | null
+          driver_license: string | null
+          id: string
+          updated_at: string | null
+          user_id: string
+          vehicle_brand: string | null
+          vehicle_color: string | null
+          vehicle_model: string | null
+          vehicle_plate: string | null
+          vehicle_type: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          driver_license?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id: string
+          vehicle_brand?: string | null
+          vehicle_color?: string | null
+          vehicle_model?: string | null
+          vehicle_plate?: string | null
+          vehicle_type?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          driver_license?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id?: string
+          vehicle_brand?: string | null
+          vehicle_color?: string | null
+          vehicle_model?: string | null
+          vehicle_plate?: string | null
+          vehicle_type?: string | null
+        }
+        Relationships: []
+      }
+      driver_passenger_ratings: {
+        Row: {
+          comment: string | null
+          created_at: string | null
+          created_by: string
+          id: string
+          rating: number
+          ride_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string | null
+          created_by: string
+          id?: string
+          rating: number
+          ride_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string | null
+          created_by?: string
+          id?: string
+          rating?: number
+          ride_id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      driver_payout_requests: {
+        Row: {
+          admin_notes: string | null
+          amount: number
+          created_at: string | null
+          driver_id: string
+          id: string
+          notes: string | null
+          payment_details: Json
+          payment_method: string
+          processed_at: string | null
+          processed_by: string | null
+          status: Database["public"]["Enums"]["payout_status"] | null
+          updated_at: string | null
+        }
+        Insert: {
+          admin_notes?: string | null
+          amount: number
+          created_at?: string | null
+          driver_id: string
+          id?: string
+          notes?: string | null
+          payment_details: Json
+          payment_method: string
+          processed_at?: string | null
+          processed_by?: string | null
+          status?: Database["public"]["Enums"]["payout_status"] | null
+          updated_at?: string | null
+        }
+        Update: {
+          admin_notes?: string | null
+          amount?: number
+          created_at?: string | null
+          driver_id?: string
+          id?: string
+          notes?: string | null
+          payment_details?: Json
+          payment_method?: string
+          processed_at?: string | null
+          processed_by?: string | null
+          status?: Database["public"]["Enums"]["payout_status"] | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      fee_payments: {
+        Row: {
+          actual_fee_amount: number | null
+          amount: number
+          available_balance_before: number | null
+          canceled_at: string | null
+          canceled_reason: string | null
+          created_at: string | null
+          driver_id: string
+          id: string
+          initial_due_date: string
+          paid_at: string | null
+          payment_due_date: string | null
+          status: Database["public"]["Enums"]["fee_status"] | null
+          updated_at: string | null
+        }
+        Insert: {
+          actual_fee_amount?: number | null
+          amount: number
+          available_balance_before?: number | null
+          canceled_at?: string | null
+          canceled_reason?: string | null
+          created_at?: string | null
+          driver_id: string
+          id?: string
+          initial_due_date: string
+          paid_at?: string | null
+          payment_due_date?: string | null
+          status?: Database["public"]["Enums"]["fee_status"] | null
+          updated_at?: string | null
+        }
+        Update: {
+          actual_fee_amount?: number | null
+          amount?: number
+          available_balance_before?: number | null
+          canceled_at?: string | null
+          canceled_reason?: string | null
+          created_at?: string | null
+          driver_id?: string
+          id?: string
+          initial_due_date?: string
+          paid_at?: string | null
+          payment_due_date?: string | null
+          status?: Database["public"]["Enums"]["fee_status"] | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      locations: {
+        Row: {
+          heading: number | null
+          id: string
+          lat: number
+          lng: number
+          speed: number | null
+          timestamp: string | null
+          user_id: string
+        }
+        Insert: {
+          heading?: number | null
+          id?: string
+          lat: number
+          lng: number
+          speed?: number | null
+          timestamp?: string | null
+          user_id: string
+        }
+        Update: {
+          heading?: number | null
+          id?: string
+          lat?: number
+          lng?: number
+          speed?: number | null
+          timestamp?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      pricing_settings: {
+        Row: {
+          created_at: string | null
+          fixed_price: number | null
+          fixed_price_active: boolean | null
+          id: string
+          price_per_km: number | null
+          price_per_km_active: boolean | null
+          service_fee_type: string | null
+          service_fee_value: number | null
+          singleton: boolean | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          fixed_price?: number | null
+          fixed_price_active?: boolean | null
+          id?: string
+          price_per_km?: number | null
+          price_per_km_active?: boolean | null
+          service_fee_type?: string | null
+          service_fee_value?: number | null
+          singleton?: boolean | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          fixed_price?: number | null
+          fixed_price_active?: boolean | null
+          id?: string
+          price_per_km?: number | null
+          price_per_km_active?: boolean | null
+          service_fee_type?: string | null
+          service_fee_value?: number | null
+          singleton?: boolean | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string | null
+          full_name: string
+          id: string
+          is_active: boolean | null
+          phone: string | null
+          updated_at: string | null
+          user_type: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string | null
+          full_name: string
+          id: string
+          is_active?: boolean | null
+          phone?: string | null
+          updated_at?: string | null
+          user_type: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string | null
+          full_name?: string
+          id?: string
+          is_active?: boolean | null
+          phone?: string | null
+          updated_at?: string | null
+          user_type?: string
+        }
+        Relationships: []
+      }
+      ride_ratings: {
+        Row: {
+          comment: string | null
+          created_at: string | null
+          id: string
+          rating: number
+          reviewee_id: string
+          reviewer_id: string
+          ride_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string | null
+          id?: string
+          rating: number
+          reviewee_id: string
+          reviewer_id: string
+          ride_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string | null
+          id?: string
+          rating?: number
+          reviewee_id?: string
+          reviewer_id?: string
+          ride_id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      rides: {
+        Row: {
+          actual_price: number | null
+          completed_at: string | null
+          created_at: string | null
+          destination_address: string
+          destination_lat: number
+          destination_lng: number
+          driver_arrived: boolean | null
+          driver_en_route: boolean | null
+          driver_id: string | null
+          driver_to_pickup_distance_km: number | null
+          driver_to_pickup_duration_min: number | null
+          en_route_started_at: string | null
+          estimated_distance: number | null
+          estimated_duration: number | null
+          estimated_price: number | null
+          id: string
+          origin_address: string
+          origin_lat: number
+          origin_lng: number
+          passenger_id: string
+          payment_method: string | null
+          pickup_arrived_at: string | null
+          started_at: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          actual_price?: number | null
+          completed_at?: string | null
+          created_at?: string | null
+          destination_address: string
+          destination_lat: number
+          destination_lng: number
+          driver_arrived?: boolean | null
+          driver_en_route?: boolean | null
+          driver_id?: string | null
+          driver_to_pickup_distance_km?: number | null
+          driver_to_pickup_duration_min?: number | null
+          en_route_started_at?: string | null
+          estimated_distance?: number | null
+          estimated_duration?: number | null
+          estimated_price?: number | null
+          id?: string
+          origin_address: string
+          origin_lat: number
+          origin_lng: number
+          passenger_id: string
+          payment_method?: string | null
+          pickup_arrived_at?: string | null
+          started_at?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          actual_price?: number | null
+          completed_at?: string | null
+          created_at?: string | null
+          destination_address?: string
+          destination_lat?: number
+          destination_lng?: number
+          driver_arrived?: boolean | null
+          driver_en_route?: boolean | null
+          driver_id?: string | null
+          driver_to_pickup_distance_km?: number | null
+          driver_to_pickup_duration_min?: number | null
+          en_route_started_at?: string | null
+          estimated_distance?: number | null
+          estimated_duration?: number | null
+          estimated_price?: number | null
+          id?: string
+          origin_address?: string
+          origin_lat?: number
+          origin_lng?: number
+          passenger_id?: string
+          payment_method?: string | null
+          pickup_arrived_at?: string | null
+          started_at?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +454,8 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      fee_status: "not_requested" | "pending" | "paid" | "canceled" | "expired"
+      payout_status: "pending" | "approved" | "rejected" | "paid"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +582,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      fee_status: ["not_requested", "pending", "paid", "canceled", "expired"],
+      payout_status: ["pending", "approved", "rejected", "paid"],
+    },
   },
 } as const
