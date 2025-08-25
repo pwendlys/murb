@@ -3,7 +3,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { DriverBottomNavigation } from '@/components/layout/DriverBottomNavigation';
-import { DriverFeePayments } from '@/components/driver/DriverFeePayments';
+import { DriverEarningsSimple } from '@/components/driver/DriverEarningsSimple';
+import { DriverSubscriptions } from '@/components/driver/DriverSubscriptions';
 
 export const DriverEarningsPage = () => {
   const { user, loading } = useAuth();
@@ -18,11 +19,11 @@ export const DriverEarningsPage = () => {
 
   // SEO Meta tags
   useEffect(() => {
-    document.title = 'Pagamento de Taxas - RideBuddy Mototaxista';
+    document.title = 'Ganhos e Assinatura - RideBuddy Mototaxista';
     
     const metaDescription = document.querySelector('meta[name="description"]');
     if (metaDescription) {
-      metaDescription.setAttribute('content', 'Gerencie pagamento de taxas, visualize saldos e prazos como mototaxista.');
+      metaDescription.setAttribute('content', 'Gerencie seus ganhos e assinatura como mototaxista no RideBuddy.');
     }
 
     const canonicalLink = document.querySelector('link[rel="canonical"]');
@@ -51,13 +52,16 @@ export const DriverEarningsPage = () => {
     <div className="min-h-screen bg-background pb-20">
       <main className="container mx-auto px-4 py-6">
         <header className="mb-6">
-          <h1 className="text-2xl font-bold text-foreground mb-2">Pagamento de Taxas</h1>
+          <h1 className="text-2xl font-bold text-foreground mb-2">Ganhos/Assinatura</h1>
           <p className="text-muted-foreground">
-            Gerencie suas obrigações de pagamento de taxa
+            Acompanhe seus ganhos e gerencie sua assinatura
           </p>
         </header>
 
-        <DriverFeePayments />
+        <div className="space-y-6">
+          <DriverEarningsSimple />
+          <DriverSubscriptions />
+        </div>
       </main>
 
       <DriverBottomNavigation />

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
+import { useAccessControl } from '@/hooks/useAccessControl';
+import { AccessBlockedScreen } from '@/components/driver/AccessBlockedScreen';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { GoogleMap } from '@/components/ui/google-map';
 import { DriverBottomNavigation } from '@/components/layout/DriverBottomNavigation';
@@ -13,8 +15,9 @@ import { Ride } from '@/types';
 import { MapPin } from 'lucide-react';
 
 export const DriverMapPage = () => {
-  const { user, loading } = useAuth();
+  const { user, loading, profile } = useAuth();
   const navigate = useNavigate();
+  const { hasActiveAccess, subscriptionLoading } = useAccessControl();
   const [currentLocation, setCurrentLocation] = useState<LocationCoords | null>(null);
   const [driverRides, setDriverRides] = useState<Ride[]>([]);
   const [ridesLoading, setRidesLoading] = useState(true);
@@ -147,7 +150,7 @@ export const DriverMapPage = () => {
     };
   }, []);
 
-  if (loading) {
+  if (loading || subscriptionLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <LoadingSpinner />
@@ -157,6 +160,11 @@ export const DriverMapPage = () => {
 
   if (!user) {
     return null;
+  }
+
+  // Verificar se é motorista e se tem acesso
+  if (profile?.user_type === 'driver' && !hasActiveAccess) {
+    return <AccessBlockedScreen />;
   }
 
   return (

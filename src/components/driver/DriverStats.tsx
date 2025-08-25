@@ -69,7 +69,7 @@ export const DriverStats = () => {
       const { data: ratings, error: ratingsError } = await supabase
         .from('ride_ratings')
         .select('rating')
-        .eq('driver_id', user.id);
+        .eq('reviewee_id', user.id);
 
       if (ratingsError) throw ratingsError;
 

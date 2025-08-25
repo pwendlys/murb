@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
+import { useAccessControl } from '@/hooks/useAccessControl';
+import { AccessBlockedScreen } from '@/components/driver/AccessBlockedScreen';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { DriverBottomNavigation } from '@/components/layout/DriverBottomNavigation';
 import { DriverCompletedRideCard } from '@/components/driver/DriverCompletedRideCard';
@@ -14,8 +16,9 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export const DriverRidesPage = () => {
-  const { user, loading } = useAuth();
+  const { user, loading, profile } = useAuth();
   const navigate = useNavigate();
+  const { hasActiveAccess, subscriptionLoading } = useAccessControl();
   const [rides, setRides] = useState<Ride[]>([]);
   const [ridesLoading, setRidesLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'completed' | 'in_progress' | 'cancelled'>('all');
@@ -128,7 +131,7 @@ export const DriverRidesPage = () => {
     }
   };
 
-  if (loading) {
+  if (loading || subscriptionLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <LoadingSpinner />
@@ -138,6 +141,11 @@ export const DriverRidesPage = () => {
 
   if (!user) {
     return null;
+  }
+
+  // Verificar se é motorista e se tem acesso
+  if (profile?.user_type === 'driver' && !hasActiveAccess) {
+    return <AccessBlockedScreen />;
   }
 
   return (

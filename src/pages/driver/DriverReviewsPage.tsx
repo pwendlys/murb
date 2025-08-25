@@ -4,10 +4,13 @@ import { useNavigate } from 'react-router-dom';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { DriverBottomNavigation } from '@/components/layout/DriverBottomNavigation';
 import { DriverReviews } from '@/components/driver/DriverReviews';
+import { useAccessControl } from '@/hooks/useAccessControl';
+import { AccessBlockedScreen } from '@/components/driver/AccessBlockedScreen';
 
 export const DriverReviewsPage = () => {
-  const { user, loading } = useAuth();
+  const { user, loading, profile } = useAuth();
   const navigate = useNavigate();
+  const { hasActiveAccess, subscriptionLoading } = useAccessControl();
 
   // Redirect to auth if not authenticated
   useEffect(() => {
@@ -35,7 +38,7 @@ export const DriverReviewsPage = () => {
     };
   }, []);
 
-  if (loading) {
+  if (loading || subscriptionLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <LoadingSpinner />
@@ -45,6 +48,11 @@ export const DriverReviewsPage = () => {
 
   if (!user) {
     return null;
+  }
+
+  // Verificar se é motorista e se tem acesso
+  if (profile?.user_type === 'driver' && !hasActiveAccess) {
+    return <AccessBlockedScreen />;
   }
 
   return (

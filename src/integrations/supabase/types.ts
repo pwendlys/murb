@@ -234,6 +234,47 @@ export type Database = {
         }
         Relationships: []
       }
+      driver_subscriptions: {
+        Row: {
+          created_at: string
+          driver_id: string
+          end_date: string
+          id: string
+          plan_id: string
+          start_date: string
+          status: Database["public"]["Enums"]["subscription_status"] | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          driver_id: string
+          end_date: string
+          id?: string
+          plan_id: string
+          start_date: string
+          status?: Database["public"]["Enums"]["subscription_status"] | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          driver_id?: string
+          end_date?: string
+          id?: string
+          plan_id?: string
+          start_date?: string
+          status?: Database["public"]["Enums"]["subscription_status"] | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fee_payments: {
         Row: {
           actual_fee_amount: number | null
@@ -504,11 +545,105 @@ export type Database = {
         }
         Relationships: []
       }
+      subscription_plans: {
+        Row: {
+          created_at: string
+          duration_days: number
+          id: string
+          is_active: boolean | null
+          name: string
+          price_cents: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          duration_days: number
+          id?: string
+          is_active?: boolean | null
+          name: string
+          price_cents: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          duration_days?: number
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          price_cents?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      subscription_requests: {
+        Row: {
+          admin_notes: string | null
+          current_subscription_id: string | null
+          driver_id: string
+          id: string
+          plan_id: string
+          processed_at: string | null
+          processed_by: string | null
+          requested_at: string
+          status: string | null
+        }
+        Insert: {
+          admin_notes?: string | null
+          current_subscription_id?: string | null
+          driver_id: string
+          id?: string
+          plan_id: string
+          processed_at?: string | null
+          processed_by?: string | null
+          requested_at?: string
+          status?: string | null
+        }
+        Update: {
+          admin_notes?: string | null
+          current_subscription_id?: string | null
+          driver_id?: string
+          id?: string
+          plan_id?: string
+          processed_at?: string | null
+          processed_by?: string | null
+          requested_at?: string
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_requests_current_subscription_id_fkey"
+            columns: ["current_subscription_id"]
+            isOneToOne: false
+            referencedRelation: "driver_subscriptions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscription_requests_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      approve_subscription_payment: {
+        Args: { p_request_id: string }
+        Returns: {
+          created_at: string
+          driver_id: string
+          end_date: string
+          id: string
+          plan_id: string
+          start_date: string
+          status: Database["public"]["Enums"]["subscription_status"] | null
+          updated_at: string
+        }
+      }
       calculate_driver_balance: {
         Args: { p_driver_id: string }
         Returns: {
@@ -537,6 +672,20 @@ export type Database = {
           status: Database["public"]["Enums"]["fee_status"] | null
           updated_at: string | null
         }
+      }
+      get_driver_subscription_status: {
+        Args: { p_driver_id: string }
+        Returns: {
+          days_remaining: number
+          duration_days: number
+          end_date: string
+          has_pending_request: boolean
+          plan_name: string
+          price_cents: number
+          start_date: string
+          status: Database["public"]["Enums"]["subscription_status"]
+          subscription_id: string
+        }[]
       }
       mark_fee_paid: {
         Args: { p_fee_id: string }
@@ -574,10 +723,29 @@ export type Database = {
           updated_at: string | null
         }
       }
+      request_subscription_renewal: {
+        Args: { p_plan_id: string }
+        Returns: {
+          admin_notes: string | null
+          current_subscription_id: string | null
+          driver_id: string
+          id: string
+          plan_id: string
+          processed_at: string | null
+          processed_by: string | null
+          requested_at: string
+          status: string | null
+        }
+      }
     }
     Enums: {
       fee_status: "not_requested" | "pending" | "paid" | "canceled" | "expired"
       payout_status: "pending" | "approved" | "rejected" | "paid"
+      subscription_status:
+        | "ativa"
+        | "vencida"
+        | "renovacao_solicitada"
+        | "bloqueada"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -707,6 +875,12 @@ export const Constants = {
     Enums: {
       fee_status: ["not_requested", "pending", "paid", "canceled", "expired"],
       payout_status: ["pending", "approved", "rejected", "paid"],
+      subscription_status: [
+        "ativa",
+        "vencida",
+        "renovacao_solicitada",
+        "bloqueada",
+      ],
     },
   },
 } as const
