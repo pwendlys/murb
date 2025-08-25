@@ -37,8 +37,8 @@ export const RateDriverDialog = ({ ride, open, onOpenChange, onSubmitted }: Rate
         .from('ride_ratings')
         .insert({
           ride_id: ride.id,
-          passenger_id: ride.passenger_id,
-          driver_id: ride.driver_id,
+          reviewer_id: ride.passenger_id,
+          reviewee_id: ride.driver_id!,
           rating,
           comment: comment.trim() || null
         });

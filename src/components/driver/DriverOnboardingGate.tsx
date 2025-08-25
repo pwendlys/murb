@@ -149,9 +149,34 @@ if (!mounted) return;
       )
       .subscribe();
 
+    // Polling fallback - check status every 5 seconds as backup
+    const pollInterval = setInterval(async () => {
+      if (!userId) return;
+      
+      try {
+        const { data: currentProfile, error } = await supabase
+          .from("profiles")
+          .select("is_active")
+          .eq("id", userId)
+          .single();
+          
+        if (!error && currentProfile && currentProfile.is_active !== profile.is_active) {
+          console.log('Profile status changed via polling:', currentProfile);
+          if (currentProfile.is_active && hasDetails) {
+            setProfile(prev => prev ? { ...prev, is_active: true } : null);
+            setOpen(false);
+            toast.success("Conta aprovada! Bem-vindo ao RideBuddy.");
+          }
+        }
+      } catch (error) {
+        console.error('Error polling profile status:', error);
+      }
+    }, 5000);
+
     return () => {
-      console.log('Cleaning up realtime subscription');
+      console.log('Cleaning up realtime subscription and polling');
       supabase.removeChannel(channel);
+      clearInterval(pollInterval);
     };
   }, [userId, profile?.is_active, profile?.user_type, hasDetails]);
 

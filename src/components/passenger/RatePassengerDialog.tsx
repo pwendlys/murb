@@ -34,8 +34,7 @@ export const RatePassengerDialog: React.FC<RatePassengerDialogProps> = ({
     try {
       const { error } = await supabase.from("driver_passenger_ratings").insert({
         ride_id: ride.id,
-        driver_id: ride.driver_id,
-        passenger_id: ride.passenger_id,
+        created_by: ride.driver_id!,
         rating,
         comment: comment.trim() || null,
       });

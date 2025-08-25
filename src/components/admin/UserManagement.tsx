@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { Profile, UserType } from '@/types';
 import { Badge } from '@/components/ui/badge';
+import { RefreshCw } from 'lucide-react';
 
 interface DriverDetails {
   user_id: string;
@@ -112,15 +113,52 @@ const UserManagement = () => {
   }, [users, roleFilter, search]);
 
   const updateUser = async (id: string, patch: Partial<Profile>) => {
+    console.log('Updating user:', id, 'with patch:', patch);
+    
     try {
-      const { error } = await supabase.from('profiles').update(patch).eq('id', id);
+      // Show loading state
+      const loadingToast = toast.loading(
+        patch.is_active !== undefined 
+          ? (patch.is_active ? 'Aprovando usuário...' : 'Desativando usuário...')
+          : 'Atualizando usuário...'
+      );
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .update(patch)
+        .eq('id', id)
+        .select('*')
+        .single();
+
+      // Dismiss loading toast
+      toast.dismiss(loadingToast);
+
       if (error) {
         console.error('Error updating user:', error);
-        toast.error('Falha ao atualizar usuário');
-      } else {
-        toast.success('Usuário atualizado');
-        setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, ...patch } : u)));
+        toast.error(`Falha ao atualizar usuário: ${error.message}`);
+        return;
       }
+
+      console.log('User updated successfully:', data);
+      
+      // Update local state immediately
+      setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, ...patch } : u)));
+      
+      // Show success message
+      if (patch.is_active !== undefined) {
+        toast.success(patch.is_active ? 'Usuário aprovado com sucesso!' : 'Usuário desativado com sucesso!');
+      } else {
+        toast.success('Usuário atualizado com sucesso!');
+      }
+
+      // Force refresh after approval to ensure consistency
+      if (patch.is_active !== undefined) {
+        console.log('Forcing refresh after approval/deactivation...');
+        setTimeout(() => {
+          fetchUsers();
+        }, 500);
+      }
+
     } catch (error) {
       console.error('Unexpected error updating user:', error);
       toast.error('Erro inesperado ao atualizar usuário');
@@ -148,7 +186,23 @@ const UserManagement = () => {
 
           <div className="space-y-1 md:col-span-2">
             <Label>Buscar (nome ou ID)</Label>
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Digite pelo menos 2 caracteres..." />
+            <div className="flex gap-2">
+              <Input 
+                value={search} 
+                onChange={(e) => setSearch(e.target.value)} 
+                placeholder="Digite pelo menos 2 caracteres..." 
+                className="flex-1"
+              />
+              <Button 
+                variant="outline" 
+                onClick={fetchUsers} 
+                disabled={loading}
+                className="flex items-center gap-2"
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                Atualizar
+              </Button>
+            </div>
           </div>
         </div>
 

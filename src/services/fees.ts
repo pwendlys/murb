@@ -96,7 +96,7 @@ export async function listAllFeesForAdmin(): Promise<FeePaymentWithProfile[]> {
     .from("fee_payments")
     .select(`
       *,
-      profiles (
+      profiles!inner (
         id,
         full_name,
         phone
