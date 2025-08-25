@@ -11,8 +11,7 @@ import PricingSettingsForm from '@/components/admin/PricingSettingsForm';
 import UserManagement from '@/components/admin/UserManagement';
 import RideHistory from '@/components/admin/RideHistory';
 import EarningsHistory from '@/components/admin/EarningsHistory';
-import { FeePaymentManagement } from '@/components/admin/FeePaymentManagement';
-import { TaxDashboard } from '@/components/admin/TaxDashboard';
+import { SubscriptionDashboard } from '@/components/admin/SubscriptionDashboard';
 import { SubscriptionManagement } from '@/components/admin/SubscriptionManagement';
 
 const Admin = () => {
@@ -49,7 +48,7 @@ const Admin = () => {
       <div className="flex justify-between items-start mb-6">
         <div className="text-center flex-1">
           <h1 className="text-3xl font-bold text-primary">Painel Administrativo</h1>
-          <p className="text-muted-foreground">Gerencie preços, usuários, corridas, ganhos, taxas e assinaturas</p>
+          <p className="text-muted-foreground">Gerencie preços, usuários, corridas, ganhos e assinaturas</p>
         </div>
         <Button 
           variant="outline" 
@@ -67,14 +66,13 @@ const Admin = () => {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="settings">
-            <TabsList className="grid grid-cols-7 w-full">
+            <TabsList className="grid grid-cols-6 w-full">
               <TabsTrigger value="settings">Configurações de Preço</TabsTrigger>
               <TabsTrigger value="users">Usuários</TabsTrigger>
               <TabsTrigger value="rides">Histórico de Corridas</TabsTrigger>
               <TabsTrigger value="earnings">Histórico de Ganhos</TabsTrigger>
-              <TabsTrigger value="fees">Cobrança de Taxas</TabsTrigger>
               <TabsTrigger value="subscriptions">Assinaturas</TabsTrigger>
-              <TabsTrigger value="dashboard">Dashboard de Taxas</TabsTrigger>
+              <TabsTrigger value="dashboard">Dashboard de Assinaturas</TabsTrigger>
             </TabsList>
 
             <TabsContent value="settings" className="pt-4">
@@ -93,16 +91,12 @@ const Admin = () => {
               <EarningsHistory />
             </TabsContent>
 
-            <TabsContent value="fees" className="pt-4">
-              <FeePaymentManagement />
-            </TabsContent>
-
             <TabsContent value="subscriptions" className="pt-4">
               <SubscriptionManagement />
             </TabsContent>
 
             <TabsContent value="dashboard" className="pt-4">
-              <TaxDashboard />
+              <SubscriptionDashboard />
             </TabsContent>
           </Tabs>
         </CardContent>
