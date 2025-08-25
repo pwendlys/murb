@@ -451,7 +451,71 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      calculate_driver_balance: {
+        Args: { p_driver_id: string }
+        Returns: {
+          available: number | null
+          created_at: string | null
+          driver_id: string
+          reserved: number | null
+          total_earnings: number | null
+          updated_at: string | null
+        }
+      }
+      cancel_fee: {
+        Args: { p_fee_id: string; p_reason: string }
+        Returns: {
+          actual_fee_amount: number | null
+          amount: number
+          available_balance_before: number | null
+          canceled_at: string | null
+          canceled_reason: string | null
+          created_at: string | null
+          driver_id: string
+          id: string
+          initial_due_date: string
+          paid_at: string | null
+          payment_due_date: string | null
+          status: Database["public"]["Enums"]["fee_status"] | null
+          updated_at: string | null
+        }
+      }
+      mark_fee_paid: {
+        Args: { p_fee_id: string }
+        Returns: {
+          actual_fee_amount: number | null
+          amount: number
+          available_balance_before: number | null
+          canceled_at: string | null
+          canceled_reason: string | null
+          created_at: string | null
+          driver_id: string
+          id: string
+          initial_due_date: string
+          paid_at: string | null
+          payment_due_date: string | null
+          status: Database["public"]["Enums"]["fee_status"] | null
+          updated_at: string | null
+        }
+      }
+      request_fee_payment: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          actual_fee_amount: number | null
+          amount: number
+          available_balance_before: number | null
+          canceled_at: string | null
+          canceled_reason: string | null
+          created_at: string | null
+          driver_id: string
+          id: string
+          initial_due_date: string
+          paid_at: string | null
+          payment_due_date: string | null
+          status: Database["public"]["Enums"]["fee_status"] | null
+          updated_at: string | null
+        }
+      }
     }
     Enums: {
       fee_status: "not_requested" | "pending" | "paid" | "canceled" | "expired"
