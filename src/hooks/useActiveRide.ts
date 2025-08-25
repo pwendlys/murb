@@ -31,14 +31,23 @@ export const useActiveRide = () => {
       } else if (data) {
         // Fetch driver details separately if needed
         let rideWithDetails = data as any;
+        console.log('🚗 Ride data found:', data);
         
         if (data.driver_id) {
+          console.log('🔍 Fetching driver details for driver_id:', data.driver_id);
+          
           // Fetch driver profile
-          const { data: driverProfile } = await supabase
+          const { data: driverProfile, error: driverProfileError } = await supabase
             .from('profiles')
             .select('id, full_name, phone, avatar_url')
             .eq('id', data.driver_id)
             .single();
+          
+          if (driverProfileError) {
+            console.error('❌ Error fetching driver profile:', driverProfileError);
+          } else {
+            console.log('✅ Driver profile fetched:', driverProfile);
+          }
           
           // Fetch driver details
           const { data: driverDetails, error: driverDetailsError } = await supabase
@@ -48,11 +57,22 @@ export const useActiveRide = () => {
             .maybeSingle();
           
           if (driverDetailsError) {
-            console.error('Error fetching driver details:', driverDetailsError);
+            console.error('❌ Error fetching driver details:', driverDetailsError);
+          } else {
+            console.log('✅ Driver details fetched:', driverDetails);
           }
           
           rideWithDetails.profiles = driverProfile;
           rideWithDetails.driver_details = driverDetails;
+          
+          console.log('🏍️ Final ride object with details:', {
+            id: rideWithDetails.id,
+            driver_id: rideWithDetails.driver_id,
+            profiles: rideWithDetails.profiles,
+            driver_details: rideWithDetails.driver_details
+          });
+        } else {
+          console.log('⚠️ No driver_id found in ride data');
         }
         
         setActiveRide(rideWithDetails);

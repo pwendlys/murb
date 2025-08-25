@@ -38,6 +38,15 @@ export const ActiveRideTracking: React.FC<ActiveRideTrackingProps> = ({ ride, on
   const [trackingDialogOpen, setTrackingDialogOpen] = useState(false);
   const [chatDialogOpen, setChatDialogOpen] = useState(false);
 
+  // Debug log to check ride data
+  console.log('🏍️ ActiveRideTracking received ride:', {
+    id: ride.id,
+    driver_id: ride.driver_id,
+    status: ride.status,
+    profiles: ride.profiles,
+    driver_details: ride.driver_details
+  });
+
   // Hook do chat (só ativar quando há motorista e corrida aceita/em andamento)
   const shouldEnableChat = ride.driver_id && ['accepted', 'in_progress'].includes(ride.status);
   const { unreadCount } = useChat({ 
@@ -272,7 +281,7 @@ export const ActiveRideTracking: React.FC<ActiveRideTrackingProps> = ({ ride, on
                       )}
                     </div>
                     
-                    {ride.driver_details && (
+                    {ride.driver_details ? (
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Bike className="w-3 h-3" />
                         <span>
@@ -280,6 +289,11 @@ export const ActiveRideTracking: React.FC<ActiveRideTrackingProps> = ({ ride, on
                           {ride.driver_details.vehicle_color && ` • ${ride.driver_details.vehicle_color}`}
                           {ride.driver_details.vehicle_plate && ` • ${ride.driver_details.vehicle_plate}`}
                         </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Bike className="w-3 h-3" />
+                        <span>Carregando dados da motocicleta...</span>
                       </div>
                     )}
                   </div>
