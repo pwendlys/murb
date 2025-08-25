@@ -29,12 +29,12 @@ export const DriverCompletedRideCard: React.FC<DriverCompletedRideCardProps> = (
   const checkIfAlreadyRated = async () => {
     try {
       const { data, error } = await supabase
-        .from("driver_passenger_ratings")
+        .from("ride_ratings")
         .select("id")
         .eq("ride_id", ride.id)
-        .eq("driver_id", ride.driver_id)
-        .eq("passenger_id", ride.passenger_id)
-        .single();
+        .eq("reviewer_id", ride.driver_id)
+        .eq("reviewee_id", ride.passenger_id)
+        .maybeSingle();
 
       if (data) {
         setHasRated(true);

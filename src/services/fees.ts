@@ -92,19 +92,41 @@ export async function getMyBalances(): Promise<DriverBalance> {
 }
 
 export async function listAllFeesForAdmin(): Promise<FeePaymentWithProfile[]> {
-  const { data, error } = await supabase
+  const { data: feesData, error } = await supabase
     .from("fee_payments")
-    .select(`
-      *,
-      profiles!inner (
-        id,
-        full_name,
-        phone
-      )
-    `)
+    .select("*")
     .order("created_at", { ascending: false });
+  
   if (error) throw new Error(error.message || 'Erro ao carregar solicitações de taxa');
-  return data || [];
+  
+  if (!feesData || feesData.length === 0) {
+    return [];
+  }
+
+  // Get unique driver IDs
+  const driverIds = [...new Set(feesData.map(fee => fee.driver_id))];
+  
+  // Fetch driver profiles
+  const { data: profilesData, error: profilesError } = await supabase
+    .from('profiles')
+    .select('id, full_name, phone')
+    .in('id', driverIds);
+
+  if (profilesError) throw new Error(profilesError.message || 'Erro ao carregar perfis');
+
+  // Create a map of driver profiles
+  const profilesMap = new Map();
+  profilesData?.forEach(profile => {
+    profilesMap.set(profile.id, profile);
+  });
+
+  // Combine fees with driver profiles
+  const result: FeePaymentWithProfile[] = feesData.map(fee => ({
+    ...fee,
+    profiles: profilesMap.get(fee.driver_id) || undefined
+  }));
+
+  return result;
 }
 
 export async function calculateServiceFee(availableBalance: number): Promise<number> {

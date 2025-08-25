@@ -61,7 +61,7 @@ export const DriverReviews = () => {
       const { data: reviewsData, error: reviewsError } = await supabase
         .from('ride_ratings')
         .select('*')
-        .eq('driver_id', user.id)
+        .eq('reviewee_id', user.id)
         .order('created_at', { ascending: false });
 
       if (reviewsError) throw reviewsError;
@@ -74,14 +74,14 @@ export const DriverReviews = () => {
         return;
       }
 
-      // Get unique passenger IDs
-      const passengerIds = [...new Set(reviewsData.map(review => review.passenger_id))];
+      // Get unique reviewer IDs (passengers who reviewed the driver)
+      const reviewerIds = [...new Set(reviewsData.map(review => review.reviewer_id))];
       
       // Fetch passenger profiles
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('id, full_name, avatar_url')
-        .in('id', passengerIds);
+        .in('id', reviewerIds);
 
       if (profilesError) throw profilesError;
 
@@ -98,7 +98,7 @@ export const DriverReviews = () => {
         comment: review.comment,
         created_at: review.created_at,
         ride_id: review.ride_id,
-        passenger_profile: profilesMap.get(review.passenger_id) || null
+        passenger_profile: profilesMap.get(review.reviewer_id) || null
       }));
 
       setReviews(processedReviews);

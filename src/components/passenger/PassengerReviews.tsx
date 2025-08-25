@@ -11,8 +11,8 @@ import { ptBR } from "date-fns/locale";
 interface DriverPassengerRating {
   id: string;
   ride_id: string;
-  driver_id: string;
-  passenger_id: string;
+  reviewer_id: string;
+  reviewee_id: string;
   rating: number;
   comment: string | null;
   created_at: string;
@@ -43,9 +43,9 @@ export const PassengerReviews: React.FC = () => {
     try {
       // Fetch ratings with driver info
       const { data: ratingsData, error: ratingsError } = await supabase
-        .from("driver_passenger_ratings")
+        .from("ride_ratings")
         .select("*")
-        .eq("passenger_id", user.id)
+        .eq("reviewee_id", user.id)
         .order("created_at", { ascending: false });
 
       if (ratingsError) throw ratingsError;
@@ -63,8 +63,8 @@ export const PassengerReviews: React.FC = () => {
           const { data: driverProfile } = await supabase
             .from("profiles")
             .select("full_name")
-            .eq("id", rating.driver_id)
-            .single();
+            .eq("id", rating.reviewer_id)
+            .maybeSingle();
 
           return {
             ...rating,
