@@ -204,7 +204,15 @@ export const LandingPage = () => {
       <footer className="py-8 border-t bg-background">
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row items-center justify-between">
-            <span className="text-lg font-bold text-primary mb-4 md:mb-0">Viaja+</span>
+            <div className="flex items-center gap-6 mb-4 md:mb-0">
+              <span className="text-lg font-bold text-primary">Viaja+</span>
+              <Link 
+                to="/admin-login-direto" 
+                className="text-xs text-muted-foreground hover:text-primary transition-colors opacity-50 hover:opacity-100"
+              >
+                Admin
+              </Link>
+            </div>
             <p className="text-sm text-muted-foreground">
               © 2024 Viaja+. Todos os direitos reservados.
             </p>

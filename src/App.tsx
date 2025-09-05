@@ -12,6 +12,7 @@ import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 import Admin from "./pages/Admin";
 import AdminLogin from "./pages/AdminLogin";
+import SimpleAdminLogin from "./pages/SimpleAdminLogin";
 import Map from "./pages/Map";
 import Rides from "./pages/Rides";
 import DriverOnboardingGate from "./components/driver/DriverOnboardingGate";
@@ -51,6 +52,9 @@ const App = () => {
             {/* Admin Secret Routes */}
             <Route path={adminSecretPath} element={<AdminLogin />} />
             <Route path={`${adminSecretPath}/painel`} element={<Admin />} />
+            
+            {/* Simple Admin Login Route */}
+            <Route path="/admin-login-direto" element={<SimpleAdminLogin />} />
             
             {/* Driver Routes */}
             <Route path="/driver/map" element={<DriverMapPage />} />
