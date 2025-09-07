@@ -35,6 +35,24 @@ export type Database = {
         }
         Relationships: []
       }
+      bd_ativo: {
+        Row: {
+          created_at: string | null
+          id: number
+          num: number
+        }
+        Insert: {
+          created_at?: string | null
+          id?: number
+          num: number
+        }
+        Update: {
+          created_at?: string | null
+          id?: number
+          num?: number
+        }
+        Relationships: []
+      }
       chat_messages: {
         Row: {
           created_at: string
@@ -700,6 +718,10 @@ export type Database = {
           status: Database["public"]["Enums"]["subscription_status"]
           subscription_id: string
         }[]
+      }
+      inserir_3x_e_parar: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
       }
       mark_fee_paid: {
         Args: { p_fee_id: string }
