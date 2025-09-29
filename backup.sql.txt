@@ -1,10 +1,9 @@
-
 -- =============================================================================
 -- PROJETO RIDE-SHARING - BACKUP COMPLETO DO BANCO DE DADOS
 -- =============================================================================
 -- Este arquivo contém todo o schema necessário para recriar o banco de dados
 -- do projeto de compartilhamento de caronas com rastreamento em tempo real.
--- Atualizado em: 2025-01-22
+-- Atualizado em: 2025-01-29
 -- =============================================================================
 
 -- =============================================================================
@@ -16,6 +15,9 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA extensions;
 
 -- Extensão para funções criptográficas
 CREATE EXTENSION IF NOT EXISTS "pgcrypto" WITH SCHEMA extensions;
+
+-- Extensão para cron jobs
+CREATE EXTENSION IF NOT EXISTS "pg_cron" WITH SCHEMA extensions;
 
 -- =============================================================================
 -- TIPOS CUSTOMIZADOS
@@ -35,6 +37,13 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- Tipo para status de assinaturas
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'subscription_status') THEN
+    CREATE TYPE public.subscription_status AS ENUM ('ativa', 'vencida', 'cancelada', 'pendente');
+  END IF;
+END $$;
+
 -- =============================================================================
 -- FUNÇÕES UTILITÁRIAS
 -- =============================================================================
@@ -43,6 +52,8 @@ END $$;
 CREATE OR REPLACE FUNCTION public.set_updated_at()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
 AS $$
 BEGIN
   IF NEW IS DISTINCT FROM OLD THEN
@@ -53,50 +64,523 @@ END;
 $$;
 
 -- Função para criar perfil automaticamente quando usuário é criado
--- Atenção: usa schema auth (reservado do Supabase)
-DO $$ BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_proc p
-    JOIN pg_namespace n ON p.pronamespace = n.oid
-    WHERE p.proname = 'handle_new_user' AND n.nspname = 'public'
-  ) THEN
-    CREATE FUNCTION public.handle_new_user()
-    RETURNS TRIGGER
-    LANGUAGE plpgsql
-    SECURITY DEFINER SET search_path = public
-    AS $fn$
-    BEGIN
-      INSERT INTO public.profiles (id, full_name, user_type, is_active, created_at, updated_at)
-      VALUES (
-        NEW.id,
-        COALESCE(NEW.raw_user_meta_data->>'full_name', 'Usuário'),
-        COALESCE(NEW.raw_user_meta_data->>'user_type', 'passenger'),
-        -- Mototaxistas precisam ser aprovados, então começam inativos
-        CASE 
-          WHEN COALESCE(NEW.raw_user_meta_data->>'user_type', 'passenger') = 'driver' THEN FALSE
-          ELSE TRUE
-        END,
-        NOW(),
-        NOW()
-      )
-      ON CONFLICT (id) DO NOTHING;
-      RETURN NEW;
-    END;
-    $fn$;
-  END IF;
-END $$;
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.profiles (id, full_name, user_type, is_active, created_at, updated_at)
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', 'Usuário'),
+    COALESCE(NEW.raw_user_meta_data->>'user_type', 'passenger'),
+    -- Mototaxistas precisam ser aprovados, então começam inativos
+    CASE 
+      WHEN COALESCE(NEW.raw_user_meta_data->>'user_type', 'passenger') = 'driver' THEN FALSE
+      ELSE TRUE
+    END,
+    NOW(),
+    NOW()
+  )
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+END;
+$$;
 
--- Trigger para criação automática de perfil
-DO $$ BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_trigger
-    WHERE tgname = 'on_auth_user_created' AND tgrelid = 'auth.users'::regclass
-  ) THEN
-    CREATE TRIGGER on_auth_user_created
-      AFTER INSERT ON auth.users
-      FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+-- Função do sistema BD_ATIVO - inserir 3 registros com pausa de 5s
+CREATE OR REPLACE FUNCTION public.inserir_3x_e_parar()
+RETURNS VOID 
+LANGUAGE plpgsql 
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  i INT := 0;
+BEGIN
+  WHILE i < 3 LOOP
+    INSERT INTO bd_ativo(num) VALUES (1);
+    i := i + 1;
+    IF i < 3 THEN
+      PERFORM pg_sleep(5);
+    END IF;
+  END LOOP;
+END;
+$$;
+
+-- Função para calcular saldo do motorista
+CREATE OR REPLACE FUNCTION public.calculate_driver_balance(p_driver_id uuid)
+RETURNS driver_balances
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_total_earnings NUMERIC DEFAULT 0;
+  v_reserved NUMERIC DEFAULT 0;
+  v_available NUMERIC DEFAULT 0;
+  v_balance RECORD;
+BEGIN
+  -- Calcular ganhos totais de corridas completadas
+  SELECT COALESCE(SUM(actual_price), 0) INTO v_total_earnings
+  FROM public.rides
+  WHERE driver_id = p_driver_id AND status = 'completed';
+
+  -- Calcular valor reservado para taxas pendentes
+  SELECT COALESCE(SUM(actual_fee_amount), 0) INTO v_reserved
+  FROM public.fee_payments
+  WHERE driver_id = p_driver_id AND status IN ('pending', 'expired');
+
+  -- Calcular disponível
+  v_available := v_total_earnings - v_reserved;
+
+  -- Garantir que não seja negativo
+  IF v_available < 0 THEN
+    v_available := 0;
   END IF;
-END $$;
+
+  -- Inserir ou atualizar saldo
+  INSERT INTO public.driver_balances (driver_id, total_earnings, available, reserved)
+  VALUES (p_driver_id, v_total_earnings, v_available, v_reserved)
+  ON CONFLICT (driver_id) DO UPDATE SET
+    total_earnings = EXCLUDED.total_earnings,
+    available = EXCLUDED.available,
+    reserved = EXCLUDED.reserved,
+    updated_at = NOW()
+  RETURNING * INTO v_balance;
+
+  RETURN v_balance;
+END;
+$$;
+
+-- Função para solicitar pagamento de taxa
+CREATE OR REPLACE FUNCTION public.request_fee_payment()
+RETURNS fee_payments
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_driver_id UUID;
+  v_profile_created_at TIMESTAMPTZ;
+  v_initial_deadline TIMESTAMPTZ;
+  v_payment_deadline TIMESTAMPTZ;
+  v_available_balance NUMERIC;
+  v_service_fee_settings RECORD;
+  v_service_fee_amount NUMERIC;
+  v_fee_payment RECORD;
+BEGIN
+  -- Verificar autenticação
+  v_driver_id := auth.uid();
+  IF v_driver_id IS NULL THEN
+    RAISE EXCEPTION 'not_authenticated';
+  END IF;
+
+  -- Verificar se é motorista
+  IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = v_driver_id AND user_type = 'driver') THEN
+    RAISE EXCEPTION 'not_a_driver';
+  END IF;
+
+  -- Buscar data de criação do perfil
+  SELECT created_at INTO v_profile_created_at
+  FROM public.profiles
+  WHERE id = v_driver_id;
+
+  -- Calcular prazo inicial (2 dias após cadastro)
+  v_initial_deadline := v_profile_created_at + INTERVAL '2 days';
+  
+  -- Verificar se ainda está dentro do prazo inicial
+  IF NOW() > v_initial_deadline THEN
+    RAISE EXCEPTION 'initial_deadline_expired';
+  END IF;
+
+  -- Verificar se já tem taxa pendente ou expirada
+  IF EXISTS (
+    SELECT 1 FROM public.fee_payments
+    WHERE driver_id = v_driver_id
+      AND status IN ('pending', 'expired')
+  ) THEN
+    RAISE EXCEPTION 'active_fee_exists';
+  END IF;
+
+  -- Buscar saldo disponível
+  SELECT COALESCE(available, 0) INTO v_available_balance
+  FROM public.driver_balances
+  WHERE driver_id = v_driver_id;
+
+  -- Se não existe, não há saldo disponível
+  IF v_available_balance IS NULL THEN
+    v_available_balance := 0;
+  END IF;
+
+  -- Verificar se tem saldo disponível
+  IF v_available_balance <= 0 THEN
+    RAISE EXCEPTION 'no_available_funds';
+  END IF;
+
+  -- Buscar configurações da taxa de serviço
+  SELECT service_fee_type, service_fee_value
+  INTO v_service_fee_settings
+  FROM public.pricing_settings
+  ORDER BY created_at DESC
+  LIMIT 1;
+
+  -- Calcular valor da taxa
+  IF v_service_fee_settings.service_fee_type = 'fixed' THEN
+    v_service_fee_amount := COALESCE(v_service_fee_settings.service_fee_value, 0);
+  ELSIF v_service_fee_settings.service_fee_type = 'percent' THEN
+    v_service_fee_amount := v_available_balance * (COALESCE(v_service_fee_settings.service_fee_value, 0) / 100);
+  ELSE
+    v_service_fee_amount := 0;
+  END IF;
+
+  -- Verificar se a taxa é válida
+  IF v_service_fee_amount <= 0 THEN
+    RAISE EXCEPTION 'invalid_fee_amount';
+  END IF;
+
+  -- Verificar se tem saldo suficiente para a taxa
+  IF v_available_balance < v_service_fee_amount THEN
+    RAISE EXCEPTION 'insufficient_funds_for_fee';
+  END IF;
+
+  -- Calcular prazo de pagamento (2 dias a partir de agora)
+  v_payment_deadline := NOW() + INTERVAL '2 days';
+
+  -- Criar solicitação de taxa
+  INSERT INTO public.fee_payments (
+    driver_id,
+    amount,
+    status,
+    initial_due_date,
+    payment_due_date,
+    available_balance_before,
+    actual_fee_amount
+  ) VALUES (
+    v_driver_id,
+    v_available_balance,
+    'pending',
+    v_initial_deadline,
+    v_payment_deadline,
+    v_available_balance,
+    v_service_fee_amount
+  ) RETURNING * INTO v_fee_payment;
+
+  -- Atualizar saldo do motorista (reservar valor da taxa)
+  INSERT INTO public.driver_balances (driver_id, total_earnings, available, reserved)
+  VALUES (v_driver_id, v_available_balance, 0, v_service_fee_amount)
+  ON CONFLICT (driver_id) DO UPDATE SET
+    available = v_available_balance - v_service_fee_amount,
+    reserved = driver_balances.reserved + v_service_fee_amount,
+    updated_at = NOW();
+
+  RETURN v_fee_payment;
+END;
+$$;
+
+-- Função para marcar taxa como paga
+CREATE OR REPLACE FUNCTION public.mark_fee_paid(p_fee_id uuid)
+RETURNS fee_payments
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_fee_payment RECORD;
+  v_current_user_id UUID;
+BEGIN
+  -- Verificar autenticação
+  v_current_user_id := auth.uid();
+  IF v_current_user_id IS NULL THEN
+    RAISE EXCEPTION 'unauthorized';
+  END IF;
+
+  -- Verificar se é admin
+  IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = v_current_user_id AND user_type = 'admin') THEN
+    RAISE EXCEPTION 'unauthorized';
+  END IF;
+
+  -- Buscar a solicitação de taxa
+  SELECT * INTO v_fee_payment
+  FROM public.fee_payments
+  WHERE id = p_fee_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'fee_not_found';
+  END IF;
+
+  -- Verificar se está em status válido
+  IF v_fee_payment.status != 'pending' THEN
+    RAISE EXCEPTION 'invalid_status';
+  END IF;
+
+  -- Marcar como paga
+  UPDATE public.fee_payments
+  SET 
+    status = 'paid',
+    paid_at = NOW(),
+    updated_at = NOW()
+  WHERE id = p_fee_id
+  RETURNING * INTO v_fee_payment;
+
+  -- Remover valor reservado do saldo do motorista
+  UPDATE public.driver_balances
+  SET 
+    reserved = reserved - v_fee_payment.actual_fee_amount,
+    updated_at = NOW()
+  WHERE driver_id = v_fee_payment.driver_id;
+
+  RETURN v_fee_payment;
+END;
+$$;
+
+-- Função para cancelar taxa
+CREATE OR REPLACE FUNCTION public.cancel_fee(p_fee_id uuid, p_reason text)
+RETURNS fee_payments
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_fee_payment RECORD;
+  v_current_user_id UUID;
+BEGIN
+  -- Verificar autenticação
+  v_current_user_id := auth.uid();
+  IF v_current_user_id IS NULL THEN
+    RAISE EXCEPTION 'unauthorized';
+  END IF;
+
+  -- Verificar se é admin
+  IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = v_current_user_id AND user_type = 'admin') THEN
+    RAISE EXCEPTION 'unauthorized';
+  END IF;
+
+  -- Buscar a solicitação de taxa
+  SELECT * INTO v_fee_payment
+  FROM public.fee_payments
+  WHERE id = p_fee_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'fee_not_found';
+  END IF;
+
+  -- Verificar se está em status válido
+  IF v_fee_payment.status NOT IN ('pending', 'expired') THEN
+    RAISE EXCEPTION 'invalid_status';
+  END IF;
+
+  -- Cancelar a taxa
+  UPDATE public.fee_payments
+  SET 
+    status = 'canceled',
+    canceled_at = NOW(),
+    canceled_reason = p_reason,
+    updated_at = NOW()
+  WHERE id = p_fee_id
+  RETURNING * INTO v_fee_payment;
+
+  -- Devolver valor reservado para saldo disponível
+  UPDATE public.driver_balances
+  SET 
+    available = available + v_fee_payment.actual_fee_amount,
+    reserved = reserved - v_fee_payment.actual_fee_amount,
+    updated_at = NOW()
+  WHERE driver_id = v_fee_payment.driver_id;
+
+  RETURN v_fee_payment;
+END;
+$$;
+
+-- Função para solicitar renovação de assinatura
+CREATE OR REPLACE FUNCTION public.request_subscription_renewal(p_plan_id uuid)
+RETURNS subscription_requests
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_driver_id UUID;
+  v_current_subscription RECORD;
+  v_plan RECORD;
+  v_request RECORD;
+BEGIN
+  -- Verificar autenticação
+  v_driver_id := auth.uid();
+  IF v_driver_id IS NULL THEN
+    RAISE EXCEPTION 'not_authenticated';
+  END IF;
+
+  -- Verificar se é motorista
+  IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = v_driver_id AND user_type = 'driver') THEN
+    RAISE EXCEPTION 'not_a_driver';
+  END IF;
+
+  -- Verificar se já tem solicitação pendente
+  IF EXISTS (
+    SELECT 1 FROM public.subscription_requests
+    WHERE driver_id = v_driver_id AND status = 'pending'
+  ) THEN
+    RAISE EXCEPTION 'pending_request_exists';
+  END IF;
+
+  -- Buscar plano
+  SELECT * INTO v_plan
+  FROM public.subscription_plans
+  WHERE id = p_plan_id AND is_active = true;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'invalid_plan';
+  END IF;
+
+  -- Buscar assinatura atual (se houver)
+  SELECT * INTO v_current_subscription
+  FROM public.driver_subscriptions
+  WHERE driver_id = v_driver_id
+  ORDER BY created_at DESC
+  LIMIT 1;
+
+  -- Criar solicitação
+  INSERT INTO public.subscription_requests (
+    driver_id,
+    plan_id,
+    current_subscription_id,
+    status
+  ) VALUES (
+    v_driver_id,
+    p_plan_id,
+    v_current_subscription.id,
+    'pending'
+  ) RETURNING * INTO v_request;
+
+  RETURN v_request;
+END;
+$$;
+
+-- Função para aprovar pagamento de assinatura
+CREATE OR REPLACE FUNCTION public.approve_subscription_payment(p_request_id uuid)
+RETURNS driver_subscriptions
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_admin_id UUID;
+  v_request RECORD;
+  v_plan RECORD;
+  v_current_subscription RECORD;
+  v_start_date TIMESTAMPTZ;
+  v_end_date TIMESTAMPTZ;
+  v_new_subscription RECORD;
+BEGIN
+  -- Verificar autenticação admin
+  v_admin_id := auth.uid();
+  IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = v_admin_id AND user_type = 'admin') THEN
+    RAISE EXCEPTION 'unauthorized';
+  END IF;
+
+  -- Buscar solicitação
+  SELECT * INTO v_request
+  FROM public.subscription_requests
+  WHERE id = p_request_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'request_not_found';
+  END IF;
+
+  IF v_request.status != 'pending' THEN
+    RAISE EXCEPTION 'invalid_request_status';
+  END IF;
+
+  -- Buscar plano
+  SELECT * INTO v_plan
+  FROM public.subscription_plans
+  WHERE id = v_request.plan_id;
+
+  -- Buscar assinatura atual (se houver)
+  SELECT * INTO v_current_subscription
+  FROM public.driver_subscriptions
+  WHERE driver_id = v_request.driver_id
+  ORDER BY created_at DESC
+  LIMIT 1;
+
+  -- Calcular datas
+  IF v_current_subscription.id IS NOT NULL AND v_current_subscription.end_date > NOW() THEN
+    -- Renovação antecipada: soma ao final do período atual
+    v_start_date := v_current_subscription.end_date;
+    v_end_date := v_current_subscription.end_date + (v_plan.duration_days || ' days')::interval;
+  ELSE
+    -- Nova assinatura ou assinatura vencida
+    v_start_date := NOW();
+    v_end_date := NOW() + (v_plan.duration_days || ' days')::interval;
+  END IF;
+
+  -- Criar nova assinatura
+  INSERT INTO public.driver_subscriptions (
+    driver_id,
+    plan_id,
+    status,
+    start_date,
+    end_date
+  ) VALUES (
+    v_request.driver_id,
+    v_request.plan_id,
+    'ativa',
+    v_start_date,
+    v_end_date
+  ) RETURNING * INTO v_new_subscription;
+
+  -- Atualizar solicitação
+  UPDATE public.subscription_requests
+  SET 
+    status = 'approved',
+    processed_at = NOW(),
+    processed_by = v_admin_id
+  WHERE id = p_request_id;
+
+  -- Marcar assinatura anterior como inativa (se houver)
+  IF v_current_subscription.id IS NOT NULL THEN
+    UPDATE public.driver_subscriptions
+    SET status = 'vencida'
+    WHERE id = v_current_subscription.id;
+  END IF;
+
+  RETURN v_new_subscription;
+END;
+$$;
+
+-- Função para obter status da assinatura do motorista
+CREATE OR REPLACE FUNCTION public.get_driver_subscription_status(p_driver_id uuid)
+RETURNS TABLE(subscription_id uuid, plan_name text, duration_days integer, price_cents integer, status subscription_status, start_date timestamp with time zone, end_date timestamp with time zone, days_remaining integer, has_pending_request boolean)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    ds.id as subscription_id,
+    sp.name as plan_name,
+    sp.duration_days,
+    sp.price_cents,
+    CASE 
+      WHEN ds.end_date < NOW() THEN 'vencida'::subscription_status
+      ELSE ds.status
+    END as status,
+    ds.start_date,
+    ds.end_date,
+    GREATEST(0, EXTRACT(DAY FROM ds.end_date - NOW())::INTEGER) as days_remaining,
+    EXISTS(
+      SELECT 1 FROM public.subscription_requests sr 
+      WHERE sr.driver_id = p_driver_id AND sr.status = 'pending'
+    ) as has_pending_request
+  FROM public.driver_subscriptions ds
+  JOIN public.subscription_plans sp ON sp.id = ds.plan_id
+  WHERE ds.driver_id = p_driver_id
+  ORDER BY ds.created_at DESC
+  LIMIT 1;
+END;
+$$;
 
 -- =============================================================================
 -- TABELAS PRINCIPAIS
@@ -116,10 +600,274 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- RLS para profiles
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+-- -----------------------------------------------------------------------------
+-- Tabela: admin_setup (Configuração inicial do admin)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.admin_setup (
+  admin_user_id UUID NOT NULL PRIMARY KEY,
+  password_set BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
 
--- Políticas RLS para profiles
+-- -----------------------------------------------------------------------------
+-- Tabela: driver_details (Detalhes dos motoristas)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.driver_details (
+  id UUID PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
+  user_id UUID NOT NULL,
+  vehicle_type TEXT DEFAULT 'car',
+  vehicle_brand TEXT,
+  vehicle_model TEXT,
+  vehicle_color TEXT,
+  vehicle_plate TEXT,
+  driver_license TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- -----------------------------------------------------------------------------
+-- Tabela: pricing_settings (Configurações de preços)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.pricing_settings (
+  id UUID PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
+  price_per_km NUMERIC DEFAULT 2.50,
+  fixed_price NUMERIC,
+  price_per_km_active BOOLEAN DEFAULT TRUE,
+  fixed_price_active BOOLEAN DEFAULT FALSE,
+  service_fee_type TEXT DEFAULT 'fixed', -- 'fixed' ou 'percent'
+  service_fee_value NUMERIC DEFAULT 0,
+  singleton BOOLEAN DEFAULT TRUE,
+  updated_by UUID,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- -----------------------------------------------------------------------------
+-- Tabela: locations (Localizações em tempo real)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.locations (
+  id UUID PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
+  user_id UUID NOT NULL,
+  lat DOUBLE PRECISION NOT NULL,
+  lng DOUBLE PRECISION NOT NULL,
+  heading DOUBLE PRECISION,
+  speed DOUBLE PRECISION,
+  timestamp TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- -----------------------------------------------------------------------------
+-- Tabela: rides (Corridas/viagens)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.rides (
+  id UUID PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
+  passenger_id UUID NOT NULL,
+  driver_id UUID,
+  origin_lat DOUBLE PRECISION NOT NULL,
+  origin_lng DOUBLE PRECISION NOT NULL,
+  destination_lat DOUBLE PRECISION NOT NULL,
+  destination_lng DOUBLE PRECISION NOT NULL,
+  estimated_duration INTEGER,
+  estimated_distance DOUBLE PRECISION,
+  estimated_price NUMERIC,
+  actual_price NUMERIC,
+  status TEXT DEFAULT 'pending', -- 'pending', 'accepted', 'in_progress', 'completed', 'cancelled'
+  driver_en_route BOOLEAN DEFAULT FALSE,
+  en_route_started_at TIMESTAMPTZ,
+  driver_to_pickup_distance_km DOUBLE PRECISION,
+  driver_to_pickup_duration_min INTEGER,
+  driver_arrived BOOLEAN DEFAULT FALSE,
+  pickup_arrived_at TIMESTAMPTZ,
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  payment_method TEXT,
+  origin_address TEXT NOT NULL,
+  destination_address TEXT NOT NULL
+);
+
+-- -----------------------------------------------------------------------------
+-- Tabela: ride_ratings (Avaliações de corridas)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.ride_ratings (
+  id UUID PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
+  ride_id UUID NOT NULL,
+  reviewer_id UUID NOT NULL,
+  reviewee_id UUID NOT NULL,
+  rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  comment TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- -----------------------------------------------------------------------------
+-- Tabela: driver_passenger_ratings (Avaliações de motoristas para passageiros)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.driver_passenger_ratings (
+  id UUID PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
+  ride_id UUID NOT NULL,
+  rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  created_by UUID NOT NULL,
+  comment TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- -----------------------------------------------------------------------------
+-- Tabela: driver_payout_requests (Solicitações de saque de motoristas)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.driver_payout_requests (
+  id UUID PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
+  driver_id UUID NOT NULL,
+  amount NUMERIC NOT NULL,
+  status public.payout_status DEFAULT 'pending',
+  payment_method TEXT NOT NULL,
+  payment_details JSONB NOT NULL,
+  notes TEXT,
+  admin_notes TEXT,
+  processed_by UUID,
+  processed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- -----------------------------------------------------------------------------
+-- Tabela: driver_balances (Saldos dos motoristas)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.driver_balances (
+  driver_id UUID NOT NULL PRIMARY KEY,
+  total_earnings NUMERIC DEFAULT 0,
+  available NUMERIC DEFAULT 0,
+  reserved NUMERIC DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- -----------------------------------------------------------------------------
+-- Tabela: fee_payments (Pagamentos de taxas)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.fee_payments (
+  id UUID PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
+  driver_id UUID NOT NULL,
+  amount NUMERIC NOT NULL,
+  status public.fee_status DEFAULT 'not_requested',
+  initial_due_date TIMESTAMPTZ NOT NULL,
+  payment_due_date TIMESTAMPTZ,
+  paid_at TIMESTAMPTZ,
+  canceled_at TIMESTAMPTZ,
+  canceled_reason TEXT,
+  available_balance_before NUMERIC DEFAULT 0,
+  actual_fee_amount NUMERIC DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- -----------------------------------------------------------------------------
+-- Tabela: chat_messages (Mensagens de chat)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.chat_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ride_id UUID NOT NULL,
+  sender_id UUID NOT NULL,
+  receiver_id UUID NOT NULL,
+  text TEXT NOT NULL,
+  delivered_at TIMESTAMPTZ,
+  read_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- -----------------------------------------------------------------------------
+-- Tabela: subscription_plans (Planos de assinatura)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.subscription_plans (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  duration_days INTEGER NOT NULL,
+  price_cents INTEGER NOT NULL,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- -----------------------------------------------------------------------------
+-- Tabela: subscription_requests (Solicitações de assinatura)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.subscription_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  driver_id UUID NOT NULL,
+  plan_id UUID NOT NULL,
+  current_subscription_id UUID,
+  status TEXT DEFAULT 'pending',
+  requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  processed_at TIMESTAMPTZ,
+  processed_by UUID,
+  admin_notes TEXT
+);
+
+-- -----------------------------------------------------------------------------
+-- Tabela: driver_subscriptions (Assinaturas dos motoristas)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.driver_subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  driver_id UUID NOT NULL,
+  plan_id UUID NOT NULL,
+  status public.subscription_status DEFAULT 'ativa',
+  start_date TIMESTAMPTZ NOT NULL,
+  end_date TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- -----------------------------------------------------------------------------
+-- Tabela: bd_ativo (Sistema de monitoramento do banco)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.bd_ativo (
+  id SERIAL PRIMARY KEY,
+  num BIGINT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- =============================================================================
+-- ÍNDICES E CONSTRAINTS
+-- =============================================================================
+
+-- Índices para locations
+CREATE UNIQUE INDEX IF NOT EXISTS locations_user_id_key ON public.locations(user_id);
+CREATE INDEX IF NOT EXISTS idx_locations_user_time ON public.locations(user_id, timestamp DESC);
+
+-- Índices para rides
+CREATE INDEX IF NOT EXISTS idx_rides_passenger ON public.rides(passenger_id);
+CREATE INDEX IF NOT EXISTS idx_rides_driver ON public.rides(driver_id);
+CREATE INDEX IF NOT EXISTS idx_rides_status ON public.rides(status);
+
+-- Constraint para garantir apenas uma linha ativa em pricing_settings
+CREATE UNIQUE INDEX IF NOT EXISTS one_pricing_row ON public.pricing_settings (singleton) WHERE singleton;
+
+-- =============================================================================
+-- ROW LEVEL SECURITY (RLS) E POLÍTICAS
+-- =============================================================================
+
+-- Habilitar RLS em todas as tabelas
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.admin_setup ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.driver_details ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.pricing_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.locations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rides ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ride_ratings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.driver_passenger_ratings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.driver_payout_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.driver_balances ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fee_payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.chat_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.subscription_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.subscription_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.driver_subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.bd_ativo ENABLE ROW LEVEL SECURITY;
+
+-- Políticas para profiles
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='profiles' AND polname='Users can insert their own profile') THEN
     CREATE POLICY "Users can insert their own profile"
@@ -153,35 +901,13 @@ DO $$ BEGIN
       ON public.profiles
       FOR UPDATE
       USING (EXISTS (
-        SELECT 1 FROM public.profiles profiles_1
-        WHERE profiles_1.id = auth.uid() AND profiles_1.user_type = 'admin'
+        SELECT 1 FROM public.profiles admin_profiles
+        WHERE admin_profiles.id = auth.uid() AND admin_profiles.user_type = 'admin'
       ));
   END IF;
 END $$;
 
--- Trigger para updated_at em profiles
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'profiles_set_updated_at') THEN
-    CREATE TRIGGER profiles_set_updated_at
-      BEFORE UPDATE ON public.profiles
-      FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
-  END IF;
-END $$;
-
--- -----------------------------------------------------------------------------
--- Tabela: admin_setup (Configuração inicial do admin)
--- -----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.admin_setup (
-  admin_user_id UUID NOT NULL PRIMARY KEY,
-  password_set BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- RLS para admin_setup
-ALTER TABLE public.admin_setup ENABLE ROW LEVEL SECURITY;
-
--- Políticas RLS para admin_setup
+-- Políticas para admin_setup
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Admins can manage admin_setup' AND tablename='admin_setup') THEN
     CREATE POLICY "Admins can manage admin_setup"
@@ -191,67 +917,12 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- Políticas para driver_details
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Admins can view admin_setup' AND tablename='admin_setup') THEN
-    CREATE POLICY "Admins can view admin_setup"
-      ON public.admin_setup
-      FOR SELECT
-      USING (EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.user_type = 'admin'));
-  END IF;
-END $$;
-
--- Trigger para updated_at em admin_setup
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'admin_setup_set_updated_at') THEN
-    CREATE TRIGGER admin_setup_set_updated_at
-      BEFORE UPDATE ON public.admin_setup
-      FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
-  END IF;
-END $$;
-
--- -----------------------------------------------------------------------------
--- Tabela: driver_details (Detalhes dos motoristas)
--- -----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.driver_details (
-  id UUID PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
-  user_id UUID NOT NULL,
-  vehicle_type TEXT DEFAULT 'car',
-  vehicle_brand TEXT,
-  vehicle_model TEXT,
-  vehicle_color TEXT,
-  vehicle_plate TEXT,
-  driver_license TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- RLS para driver_details
-ALTER TABLE public.driver_details ENABLE ROW LEVEL SECURITY;
-
--- Políticas RLS para driver_details
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Drivers can insert their own details' AND tablename='driver_details') THEN
-    CREATE POLICY "Drivers can insert their own details"
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Drivers can manage their own details' AND tablename='driver_details') THEN
+    CREATE POLICY "Drivers can manage their own details"
       ON public.driver_details
-      FOR INSERT
-      WITH CHECK (user_id = auth.uid());
-  END IF;
-END $$;
-
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Drivers can update their own details' AND tablename='driver_details') THEN
-    CREATE POLICY "Drivers can update their own details"
-      ON public.driver_details
-      FOR UPDATE
-      USING (user_id = auth.uid());
-  END IF;
-END $$;
-
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Drivers can view their own details' AND tablename='driver_details') THEN
-    CREATE POLICY "Drivers can view their own details"
-      ON public.driver_details
-      FOR SELECT
+      FOR ALL
       USING (user_id = auth.uid());
   END IF;
 END $$;
@@ -266,51 +937,20 @@ DO $$ BEGIN
 END $$;
 
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Users can view driver details for rides' AND tablename='driver_details') THEN
-    CREATE POLICY "Users can view driver details for rides"
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Passengers can view driver details during active rides' AND tablename='driver_details') THEN
+    CREATE POLICY "Passengers can view driver details during active rides"
       ON public.driver_details
       FOR SELECT
       USING (EXISTS (
         SELECT 1 FROM public.rides
-        WHERE ((rides.passenger_id = auth.uid()) OR (rides.driver_id = auth.uid()))
-          AND (rides.driver_id = driver_details.user_id)
+        WHERE rides.driver_id = driver_details.user_id
+          AND rides.passenger_id = auth.uid()
+          AND rides.status IN ('accepted', 'in_progress')
       ));
   END IF;
 END $$;
 
--- Trigger para updated_at em driver_details
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='driver_details_set_updated_at') THEN
-    CREATE TRIGGER driver_details_set_updated_at
-      BEFORE UPDATE ON public.driver_details
-      FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
-  END IF;
-END $$;
-
--- -----------------------------------------------------------------------------
--- Tabela: pricing_settings (Configurações de preços)
--- -----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.pricing_settings (
-  id UUID PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
-  price_per_km NUMERIC DEFAULT 2.50,
-  fixed_price NUMERIC,
-  price_per_km_active BOOLEAN DEFAULT TRUE,
-  fixed_price_active BOOLEAN DEFAULT FALSE,
-  service_fee_type TEXT DEFAULT 'fixed', -- 'fixed' ou 'percent'
-  service_fee_value NUMERIC DEFAULT 0,
-  singleton BOOLEAN DEFAULT TRUE,
-  updated_by UUID,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- RLS para pricing_settings
-ALTER TABLE public.pricing_settings ENABLE ROW LEVEL SECURITY;
-
--- Constraint para garantir apenas uma linha ativa
-CREATE UNIQUE INDEX IF NOT EXISTS one_pricing_row ON public.pricing_settings (singleton) WHERE singleton;
-
--- Políticas RLS para pricing_settings
+-- Políticas para pricing_settings
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Admins can manage pricing settings' AND tablename='pricing_settings') THEN
     CREATE POLICY "Admins can manage pricing settings"
@@ -329,61 +969,13 @@ DO $$ BEGIN
   END IF;
 END $$;
 
--- Trigger para updated_at em pricing_settings
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='pricing_settings_set_updated_at') THEN
-    CREATE TRIGGER pricing_settings_set_updated_at
-      BEFORE UPDATE ON public.pricing_settings
-      FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
-  END IF;
-END $$;
-
--- Dados iniciais para pricing_settings
-INSERT INTO public.pricing_settings (price_per_km, fixed_price, price_per_km_active, fixed_price_active, service_fee_type, service_fee_value, singleton)
-SELECT 2.50, NULL, TRUE, FALSE, 'fixed', 0, TRUE
-WHERE NOT EXISTS (SELECT 1 FROM public.pricing_settings);
-
--- -----------------------------------------------------------------------------
--- Tabela: locations (Localizações em tempo real)
--- -----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.locations (
-  id UUID PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
-  user_id UUID NOT NULL,
-  lat DOUBLE PRECISION NOT NULL,
-  lng DOUBLE PRECISION NOT NULL,
-  heading DOUBLE PRECISION,
-  speed DOUBLE PRECISION,
-  timestamp TIMESTAMPTZ DEFAULT NOW()
-);
-
--- RLS para locations
-ALTER TABLE public.locations ENABLE ROW LEVEL SECURITY;
-
--- Índices para performance e upsert
-CREATE UNIQUE INDEX IF NOT EXISTS locations_user_id_key ON public.locations(user_id);
-CREATE INDEX IF NOT EXISTS idx_locations_user_time ON public.locations(user_id, timestamp DESC);
-
--- Políticas RLS para locations
+-- Políticas para locations
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Users can manage their own location' AND tablename='locations') THEN
     CREATE POLICY "Users can manage their own location"
       ON public.locations
       FOR ALL
       USING (user_id = auth.uid());
-  END IF;
-END $$;
-
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Passengers can view driver location for active rides' AND tablename='locations') THEN
-    CREATE POLICY "Passengers can view driver location for active rides"
-      ON public.locations
-      FOR SELECT
-      USING (EXISTS (
-        SELECT 1 FROM public.rides
-        WHERE rides.passenger_id = auth.uid()
-          AND rides.driver_id = locations.user_id
-          AND rides.status IN ('accepted', 'in_progress')
-      ));
   END IF;
 END $$;
 
@@ -401,46 +993,7 @@ DO $$ BEGIN
   END IF;
 END $$;
 
--- -----------------------------------------------------------------------------
--- Tabela: rides (Corridas/viagens)
--- -----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.rides (
-  id UUID PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
-  passenger_id UUID NOT NULL,
-  driver_id UUID,
-  origin_lat DOUBLE PRECISION NOT NULL,
-  origin_lng DOUBLE PRECISION NOT NULL,
-  destination_lat DOUBLE PRECISION NOT NULL,
-  destination_lng DOUBLE PRECISION NOT NULL,
-  estimated_duration INTEGER,
-  estimated_distance DOUBLE PRECISION,
-  estimated_price NUMERIC,
-  actual_price NUMERIC,
-  status TEXT DEFAULT 'pending', -- 'pending', 'accepted', 'in_progress', 'completed', 'cancelled'
-  driver_en_route BOOLEAN DEFAULT FALSE,
-  en_route_started_at TIMESTAMPTZ,
-  driver_to_pickup_distance_km DOUBLE PRECISION,
-  driver_to_pickup_duration_min INTEGER,
-  driver_arrived BOOLEAN DEFAULT FALSE,
-  pickup_arrived_at TIMESTAMPTZ,
-  started_at TIMESTAMPTZ,
-  completed_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  payment_method TEXT,
-  origin_address TEXT NOT NULL,
-  destination_address TEXT NOT NULL
-);
-
--- RLS para rides
-ALTER TABLE public.rides ENABLE ROW LEVEL SECURITY;
-
--- Índices para performance
-CREATE INDEX IF NOT EXISTS idx_rides_passenger ON public.rides(passenger_id);
-CREATE INDEX IF NOT EXISTS idx_rides_driver ON public.rides(driver_id);
-CREATE INDEX IF NOT EXISTS idx_rides_status ON public.rides(status);
-
--- Políticas RLS para rides
+-- Políticas para rides
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Admins can view all rides' AND tablename='rides') THEN
     CREATE POLICY "Admins can view all rides"
@@ -460,32 +1013,8 @@ DO $$ BEGIN
 END $$;
 
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Passengers can update their rides' AND tablename='rides') THEN
-    CREATE POLICY "Passengers can update their rides"
-      ON public.rides
-      FOR UPDATE
-      USING (passenger_id = auth.uid());
-  END IF;
-END $$;
-
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Drivers can accept rides' AND tablename='rides') THEN
-    CREATE POLICY "Drivers can accept rides"
-      ON public.rides
-      FOR UPDATE
-      USING (
-        (driver_id = auth.uid())
-        OR (
-          driver_id IS NULL
-          AND EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.user_type = 'driver')
-        )
-      );
-  END IF;
-END $$;
-
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Users can view their own rides' AND tablename='rides') THEN
-    CREATE POLICY "Users can view their own rides"
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Users can view their rides' AND tablename='rides') THEN
+    CREATE POLICY "Users can view their rides"
       ON public.rides
       FOR SELECT
       USING ((passenger_id = auth.uid()) OR (driver_id = auth.uid()));
@@ -493,155 +1022,55 @@ DO $$ BEGIN
 END $$;
 
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Drivers can view available rides' AND tablename='rides') THEN
-    CREATE POLICY "Drivers can view available rides"
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Users can update their rides' AND tablename='rides') THEN
+    CREATE POLICY "Users can update their rides"
+      ON public.rides
+      FOR UPDATE
+      USING ((passenger_id = auth.uid()) OR (driver_id = auth.uid()) OR 
+             ((driver_id IS NULL) AND (status = 'pending')));
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Drivers can view pending rides' AND tablename='rides') THEN
+    CREATE POLICY "Drivers can view pending rides"
       ON public.rides
       FOR SELECT
-      USING (
-        driver_id IS NULL AND status = 'pending'
-        AND EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.user_type = 'driver')
-      );
+      USING ((status = 'pending') AND 
+             (EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.user_type = 'driver')));
   END IF;
 END $$;
 
--- Trigger para updated_at em rides
+-- Políticas para ride_ratings
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='rides_set_updated_at') THEN
-    CREATE TRIGGER rides_set_updated_at
-      BEFORE UPDATE ON public.rides
-      FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
-  END IF;
-END $$;
-
--- -----------------------------------------------------------------------------
--- Tabela: ride_ratings (Avaliações de passageiros para motoristas)
--- -----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.ride_ratings (
-  id UUID PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
-  ride_id UUID NOT NULL,
-  driver_id UUID NOT NULL,
-  passenger_id UUID NOT NULL,
-  rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
-  comment TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- RLS para ride_ratings
-ALTER TABLE public.ride_ratings ENABLE ROW LEVEL SECURITY;
-
--- Políticas RLS para ride_ratings
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Passengers can create ratings' AND tablename='ride_ratings') THEN
-    CREATE POLICY "Passengers can create ratings"
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Users can manage ratings for their rides' AND tablename='ride_ratings') THEN
+    CREATE POLICY "Users can manage ratings for their rides"
       ON public.ride_ratings
-      FOR INSERT
-      WITH CHECK (passenger_id = auth.uid());
+      FOR ALL
+      USING ((reviewer_id = auth.uid()) OR (reviewee_id = auth.uid()));
   END IF;
 END $$;
 
+-- Políticas para driver_passenger_ratings
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Passengers can update their ratings' AND tablename='ride_ratings') THEN
-    CREATE POLICY "Passengers can update their ratings"
-      ON public.ride_ratings
-      FOR UPDATE
-      USING (passenger_id = auth.uid());
-  END IF;
-END $$;
-
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Users can view ratings for their rides' AND tablename='ride_ratings') THEN
-    CREATE POLICY "Users can view ratings for their rides"
-      ON public.ride_ratings
-      FOR SELECT
-      USING ((passenger_id = auth.uid()) OR (driver_id = auth.uid()));
-  END IF;
-END $$;
-
--- -----------------------------------------------------------------------------
--- Tabela: driver_passenger_ratings (Avaliações de motoristas para passageiros)
--- -----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.driver_passenger_ratings (
-  id UUID PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
-  ride_id UUID NOT NULL,
-  driver_id UUID NOT NULL,
-  passenger_id UUID NOT NULL,
-  rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
-  comment TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- RLS para driver_passenger_ratings
-ALTER TABLE public.driver_passenger_ratings ENABLE ROW LEVEL SECURITY;
-
--- Políticas RLS para driver_passenger_ratings
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Drivers can create passenger ratings' AND tablename='driver_passenger_ratings') THEN
-    CREATE POLICY "Drivers can create passenger ratings"
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Users can manage driver passenger ratings' AND tablename='driver_passenger_ratings') THEN
+    CREATE POLICY "Users can manage driver passenger ratings"
       ON public.driver_passenger_ratings
-      FOR INSERT
-      WITH CHECK (driver_id = auth.uid());
+      FOR ALL
+      USING ((created_by = auth.uid()) OR (EXISTS (
+        SELECT 1 FROM public.rides
+        WHERE rides.id = driver_passenger_ratings.ride_id
+          AND ((rides.passenger_id = auth.uid()) OR (rides.driver_id = auth.uid()))
+      )));
   END IF;
 END $$;
 
+-- Políticas para driver_payout_requests
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Drivers can update passenger ratings' AND tablename='driver_passenger_ratings') THEN
-    CREATE POLICY "Drivers can update passenger ratings"
-      ON public.driver_passenger_ratings
-      FOR UPDATE
-      USING (driver_id = auth.uid());
-  END IF;
-END $$;
-
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Users can view driver ratings' AND tablename='driver_passenger_ratings') THEN
-    CREATE POLICY "Users can view driver ratings"
-      ON public.driver_passenger_ratings
-      FOR SELECT
-      USING ((driver_id = auth.uid()) OR (passenger_id = auth.uid()));
-  END IF;
-END $$;
-
--- -----------------------------------------------------------------------------
--- Tabela: driver_payout_requests (Solicitações de pagamento dos motoristas)
--- -----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.driver_payout_requests (
-  id UUID PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
-  driver_id UUID NOT NULL,
-  amount NUMERIC NOT NULL,
-  payment_method TEXT NOT NULL,
-  payment_details JSONB,
-  status public.payout_status DEFAULT 'pending',
-  notes TEXT,
-  admin_notes TEXT,
-  processed_by UUID,
-  processed_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- RLS para driver_payout_requests
-ALTER TABLE public.driver_payout_requests ENABLE ROW LEVEL SECURITY;
-
--- Índices para performance
-CREATE INDEX IF NOT EXISTS idx_payout_requests_driver ON public.driver_payout_requests(driver_id);
-CREATE INDEX IF NOT EXISTS idx_payout_requests_status ON public.driver_payout_requests(status);
-CREATE INDEX IF NOT EXISTS idx_payout_requests_created ON public.driver_payout_requests(created_at);
-
--- Políticas RLS para driver_payout_requests
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Drivers can create payout requests' AND tablename='driver_payout_requests') THEN
-    CREATE POLICY "Drivers can create payout requests"
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Drivers can manage their payout requests' AND tablename='driver_payout_requests') THEN
+    CREATE POLICY "Drivers can manage their payout requests"
       ON public.driver_payout_requests
-      FOR INSERT
-      WITH CHECK (driver_id = auth.uid());
-  END IF;
-END $$;
-
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Drivers can view their own payout requests' AND tablename='driver_payout_requests') THEN
-    CREATE POLICY "Drivers can view their own payout requests"
-      ON public.driver_payout_requests
-      FOR SELECT
+      FOR ALL
       USING (driver_id = auth.uid());
   END IF;
 END $$;
@@ -655,16 +1084,256 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- Políticas para driver_balances
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Admins can update payout requests' AND tablename='driver_payout_requests') THEN
-    CREATE POLICY "Admins can update payout requests"
-      ON public.driver_payout_requests
-      FOR UPDATE
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Drivers can view their own balance' AND tablename='driver_balances') THEN
+    CREATE POLICY "Drivers can view their own balance"
+      ON public.driver_balances
+      FOR SELECT
+      USING (driver_id = auth.uid());
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='System can manage driver balances' AND tablename='driver_balances') THEN
+    CREATE POLICY "System can manage driver balances"
+      ON public.driver_balances
+      FOR ALL
+      USING (TRUE);
+  END IF;
+END $$;
+
+-- Políticas para fee_payments
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Drivers can view their own fee payments' AND tablename='fee_payments') THEN
+    CREATE POLICY "Drivers can view their own fee payments"
+      ON public.fee_payments
+      FOR SELECT
+      USING (driver_id = auth.uid());
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Admins can manage fee payments' AND tablename='fee_payments') THEN
+    CREATE POLICY "Admins can manage fee payments"
+      ON public.fee_payments
+      FOR ALL
       USING (EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.user_type = 'admin'));
   END IF;
 END $$;
 
--- Trigger para updated_at em driver_payout_requests
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='System can manage fee payments' AND tablename='fee_payments') THEN
+    CREATE POLICY "System can manage fee payments"
+      ON public.fee_payments
+      FOR ALL
+      USING (TRUE);
+  END IF;
+END $$;
+
+-- Políticas para chat_messages
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Users can view messages from their rides' AND tablename='chat_messages') THEN
+    CREATE POLICY "Users can view messages from their rides"
+      ON public.chat_messages
+      FOR SELECT
+      USING (EXISTS (
+        SELECT 1 FROM public.rides
+        WHERE rides.id = chat_messages.ride_id
+          AND ((rides.passenger_id = auth.uid()) OR (rides.driver_id = auth.uid()))
+      ));
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Users can send messages in their rides' AND tablename='chat_messages') THEN
+    CREATE POLICY "Users can send messages in their rides"
+      ON public.chat_messages
+      FOR INSERT
+      WITH CHECK (
+        (sender_id = auth.uid()) AND
+        (EXISTS (
+          SELECT 1 FROM public.rides
+          WHERE rides.id = chat_messages.ride_id
+            AND ((rides.passenger_id = auth.uid()) OR (rides.driver_id = auth.uid()))
+        )) AND
+        (EXISTS (
+          SELECT 1 FROM public.rides
+          WHERE rides.id = chat_messages.ride_id
+            AND ((rides.passenger_id = chat_messages.receiver_id) OR (rides.driver_id = chat_messages.receiver_id))
+        ))
+      );
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Users can update messages sent to them' AND tablename='chat_messages') THEN
+    CREATE POLICY "Users can update messages sent to them"
+      ON public.chat_messages
+      FOR UPDATE
+      USING (receiver_id = auth.uid())
+      WITH CHECK (receiver_id = auth.uid());
+  END IF;
+END $$;
+
+-- Políticas para subscription_plans
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Everyone can view active subscription plans' AND tablename='subscription_plans') THEN
+    CREATE POLICY "Everyone can view active subscription plans"
+      ON public.subscription_plans
+      FOR SELECT
+      USING (is_active = TRUE);
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Admins can manage subscription plans' AND tablename='subscription_plans') THEN
+    CREATE POLICY "Admins can manage subscription plans"
+      ON public.subscription_plans
+      FOR ALL
+      USING (EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.user_type = 'admin'));
+  END IF;
+END $$;
+
+-- Políticas para subscription_requests
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Drivers can create and view their own subscription requests' AND tablename='subscription_requests') THEN
+    CREATE POLICY "Drivers can create and view their own subscription requests"
+      ON public.subscription_requests
+      FOR ALL
+      USING (driver_id = auth.uid());
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Admins can view and manage all subscription requests' AND tablename='subscription_requests') THEN
+    CREATE POLICY "Admins can view and manage all subscription requests"
+      ON public.subscription_requests
+      FOR ALL
+      USING (EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.user_type = 'admin'));
+  END IF;
+END $$;
+
+-- Políticas para driver_subscriptions
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Drivers can view their own subscriptions' AND tablename='driver_subscriptions') THEN
+    CREATE POLICY "Drivers can view their own subscriptions"
+      ON public.driver_subscriptions
+      FOR SELECT
+      USING (driver_id = auth.uid());
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Admins can view all driver subscriptions' AND tablename='driver_subscriptions') THEN
+    CREATE POLICY "Admins can view all driver subscriptions"
+      ON public.driver_subscriptions
+      FOR SELECT
+      USING (EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.user_type = 'admin'));
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='System can manage driver subscriptions' AND tablename='driver_subscriptions') THEN
+    CREATE POLICY "System can manage driver subscriptions"
+      ON public.driver_subscriptions
+      FOR ALL
+      USING (TRUE);
+  END IF;
+END $$;
+
+-- Políticas para bd_ativo
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='System can insert bd_ativo records' AND tablename='bd_ativo') THEN
+    CREATE POLICY "System can insert bd_ativo records"
+      ON public.bd_ativo
+      FOR INSERT
+      WITH CHECK (TRUE);
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Admins can view all bd_ativo records' AND tablename='bd_ativo') THEN
+    CREATE POLICY "Admins can view all bd_ativo records"
+      ON public.bd_ativo
+      FOR SELECT
+      USING (EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.user_type = 'admin'));
+  END IF;
+END $$;
+
+-- =============================================================================
+-- TRIGGERS
+-- =============================================================================
+
+-- Trigger para perfil automaticamente criado
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgname = 'on_auth_user_created' AND tgrelid = 'auth.users'::regclass
+  ) THEN
+    CREATE TRIGGER on_auth_user_created
+      AFTER INSERT ON auth.users
+      FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+  END IF;
+END $$;
+
+-- Triggers para updated_at
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'profiles_set_updated_at') THEN
+    CREATE TRIGGER profiles_set_updated_at
+      BEFORE UPDATE ON public.profiles
+      FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'admin_setup_set_updated_at') THEN
+    CREATE TRIGGER admin_setup_set_updated_at
+      BEFORE UPDATE ON public.admin_setup
+      FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='driver_details_set_updated_at') THEN
+    CREATE TRIGGER driver_details_set_updated_at
+      BEFORE UPDATE ON public.driver_details
+      FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='pricing_settings_set_updated_at') THEN
+    CREATE TRIGGER pricing_settings_set_updated_at
+      BEFORE UPDATE ON public.pricing_settings
+      FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='rides_set_updated_at') THEN
+    CREATE TRIGGER rides_set_updated_at
+      BEFORE UPDATE ON public.rides
+      FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='ride_ratings_set_updated_at') THEN
+    CREATE TRIGGER ride_ratings_set_updated_at
+      BEFORE UPDATE ON public.ride_ratings
+      FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='driver_passenger_ratings_set_updated_at') THEN
+    CREATE TRIGGER driver_passenger_ratings_set_updated_at
+      BEFORE UPDATE ON public.driver_passenger_ratings
+      FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+  END IF;
+END $$;
+
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='driver_payout_requests_set_updated_at') THEN
     CREATE TRIGGER driver_payout_requests_set_updated_at
@@ -673,42 +1342,6 @@ DO $$ BEGIN
   END IF;
 END $$;
 
--- -----------------------------------------------------------------------------
--- Tabela: driver_balances (Saldos dos motoristas)
--- -----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.driver_balances (
-  driver_id UUID NOT NULL PRIMARY KEY,
-  total_earnings NUMERIC NOT NULL DEFAULT 0,
-  available NUMERIC NOT NULL DEFAULT 0,  -- disponível para reserva
-  reserved NUMERIC NOT NULL DEFAULT 0,   -- reservado para taxas
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- RLS para driver_balances
-ALTER TABLE public.driver_balances ENABLE ROW LEVEL SECURITY;
-
--- Políticas RLS para driver_balances
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='balances_driver_select' AND tablename='driver_balances') THEN
-    CREATE POLICY "balances_driver_select"
-      ON public.driver_balances
-      FOR SELECT
-      USING (driver_id = auth.uid());
-  END IF;
-END $$;
-
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='balances_admin_full' AND tablename='driver_balances') THEN
-    CREATE POLICY "balances_admin_full"
-      ON public.driver_balances
-      FOR ALL
-      USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.user_type = 'admin'))
-      WITH CHECK (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.user_type = 'admin'));
-  END IF;
-END $$;
-
--- Trigger para updated_at em driver_balances
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='driver_balances_set_updated_at') THEN
     CREATE TRIGGER driver_balances_set_updated_at
@@ -717,67 +1350,6 @@ DO $$ BEGIN
   END IF;
 END $$;
 
--- -----------------------------------------------------------------------------
--- Tabela: fee_payments (Pagamentos de taxas)
--- -----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.fee_payments (
-  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
-  driver_id UUID NOT NULL,
-  amount NUMERIC NOT NULL,
-  status public.fee_status NOT NULL DEFAULT 'not_requested',
-  initial_due_date TIMESTAMPTZ NOT NULL,  -- 2 dias após primeiro acesso
-  payment_due_date TIMESTAMPTZ,  -- 2 dias após solicitação
-  paid_at TIMESTAMPTZ,
-  canceled_at TIMESTAMPTZ,
-  canceled_reason TEXT,
-  available_balance_before NUMERIC DEFAULT 0, -- Saldo antes da solicitação
-  actual_fee_amount NUMERIC DEFAULT 0, -- Valor real da taxa
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- RLS para fee_payments
-ALTER TABLE public.fee_payments ENABLE ROW LEVEL SECURITY;
-
--- Políticas RLS para fee_payments
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='fee_driver_select' AND tablename='fee_payments') THEN
-    CREATE POLICY "fee_driver_select"
-      ON public.fee_payments
-      FOR SELECT
-      USING (driver_id = auth.uid());
-  END IF;
-END $$;
-
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='fee_driver_insert' AND tablename='fee_payments') THEN
-    CREATE POLICY "fee_driver_insert"
-      ON public.fee_payments
-      FOR INSERT
-      WITH CHECK (driver_id = auth.uid());
-  END IF;
-END $$;
-
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='fee_driver_update_restrict' AND tablename='fee_payments') THEN
-    CREATE POLICY "fee_driver_update_restrict"
-      ON public.fee_payments
-      FOR UPDATE
-      USING (FALSE);
-  END IF;
-END $$;
-
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='fee_admin_full' AND tablename='fee_payments') THEN
-    CREATE POLICY "fee_admin_full"
-      ON public.fee_payments
-      FOR ALL
-      USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.user_type = 'admin'))
-      WITH CHECK (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.user_type = 'admin'));
-  END IF;
-END $$;
-
--- Trigger para updated_at em fee_payments
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='fee_payments_set_updated_at') THEN
     CREATE TRIGGER fee_payments_set_updated_at
@@ -786,110 +1358,39 @@ DO $$ BEGIN
   END IF;
 END $$;
 
--- -----------------------------------------------------------------------------
--- Tabela: chat_messages (Mensagens de chat entre motoristas e passageiros)
--- -----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.chat_messages (
-  id UUID PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
-  ride_id UUID NOT NULL,
-  sender_id UUID NOT NULL,
-  receiver_id UUID NOT NULL,
-  text TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  delivered_at TIMESTAMPTZ,
-  read_at TIMESTAMPTZ
-);
-
--- RLS para chat_messages
-ALTER TABLE public.chat_messages ENABLE ROW LEVEL SECURITY;
-
--- Índices para performance
-CREATE INDEX IF NOT EXISTS idx_chat_messages_ride_created ON public.chat_messages(ride_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_chat_messages_receiver_unread ON public.chat_messages(receiver_id, read_at);
-
--- Políticas RLS para chat_messages
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Participants can insert messages during active rides' AND tablename='chat_messages') THEN
-    CREATE POLICY "Participants can insert messages during active rides"
-      ON public.chat_messages
-      FOR INSERT
-      WITH CHECK (
-        (sender_id = auth.uid())
-        AND EXISTS (
-          SELECT 1 FROM public.rides r
-          WHERE r.id = chat_messages.ride_id
-            AND r.status IN ('accepted', 'in_progress')
-            AND (
-              (chat_messages.sender_id = r.driver_id AND chat_messages.receiver_id = r.passenger_id)
-              OR
-              (chat_messages.sender_id = r.passenger_id AND chat_messages.receiver_id = r.driver_id)
-            )
-        )
-      );
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='chat_messages_set_updated_at') THEN
+    CREATE TRIGGER chat_messages_set_updated_at
+      BEFORE UPDATE ON public.chat_messages
+      FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
   END IF;
 END $$;
 
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Participants can select chat messages for their rides' AND tablename='chat_messages') THEN
-    CREATE POLICY "Participants can select chat messages for their rides"
-      ON public.chat_messages
-      FOR SELECT
-      USING (
-        EXISTS (
-          SELECT 1 FROM public.rides r
-          WHERE r.id = chat_messages.ride_id
-            AND (auth.uid() = r.driver_id OR auth.uid() = r.passenger_id)
-        )
-      );
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='subscription_plans_set_updated_at') THEN
+    CREATE TRIGGER subscription_plans_set_updated_at
+      BEFORE UPDATE ON public.subscription_plans
+      FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
   END IF;
 END $$;
 
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE polname='Receiver can update message read status' AND tablename='chat_messages') THEN
-    CREATE POLICY "Receiver can update message read status"
-      ON public.chat_messages
-      FOR UPDATE
-      USING (receiver_id = auth.uid())
-      WITH CHECK (receiver_id = auth.uid());
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='driver_subscriptions_set_updated_at') THEN
+    CREATE TRIGGER driver_subscriptions_set_updated_at
+      BEFORE UPDATE ON public.driver_subscriptions
+      FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
   END IF;
 END $$;
 
 -- =============================================================================
--- ÍNDICES ADICIONAIS PARA PERFORMANCE
+-- CONFIGURAÇÕES DE REALTIME
 -- =============================================================================
 
--- Índices para profiles
-CREATE INDEX IF NOT EXISTS idx_profiles_active ON public.profiles(is_active);
-CREATE INDEX IF NOT EXISTS idx_profiles_user_type ON public.profiles(user_type);
-
--- Índices para driver_details
-CREATE INDEX IF NOT EXISTS idx_driver_details_user_id ON public.driver_details(user_id);
-
--- Índices para ride_ratings
-CREATE INDEX IF NOT EXISTS idx_ride_ratings_ride_id ON public.ride_ratings(ride_id);
-CREATE INDEX IF NOT EXISTS idx_ride_ratings_driver_id ON public.ride_ratings(driver_id);
-CREATE INDEX IF NOT EXISTS idx_ride_ratings_passenger_id ON public.ride_ratings(passenger_id);
-
--- Índices para driver_passenger_ratings
-CREATE INDEX IF NOT EXISTS idx_driver_passenger_ratings_ride_id ON public.driver_passenger_ratings(ride_id);
-CREATE INDEX IF NOT EXISTS idx_driver_passenger_ratings_driver_id ON public.driver_passenger_ratings(driver_id);
-CREATE INDEX IF NOT EXISTS idx_driver_passenger_ratings_passenger_id ON public.driver_passenger_ratings(passenger_id);
-
--- =============================================================================
--- CONFIGURAÇÕES DE TEMPO REAL (REALTIME)
--- =============================================================================
-
--- Configurar replica identity para payload completo em UPDATE
-ALTER TABLE public.locations REPLICA IDENTITY FULL;
-ALTER TABLE public.rides REPLICA IDENTITY FULL;
-ALTER TABLE public.chat_messages REPLICA IDENTITY FULL;
-ALTER TABLE public.driver_balances REPLICA IDENTITY FULL;
-ALTER TABLE public.fee_payments REPLICA IDENTITY FULL;
-
--- Adicionar tabelas à publicação realtime
+-- Habilitar realtime para tabelas críticas
 DO $$ BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='locations'
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'locations'
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.locations;
   END IF;
@@ -897,7 +1398,8 @@ END $$;
 
 DO $$ BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='rides'
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'rides'
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.rides;
   END IF;
@@ -905,7 +1407,8 @@ END $$;
 
 DO $$ BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='chat_messages'
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'chat_messages'
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.chat_messages;
   END IF;
@@ -913,7 +1416,8 @@ END $$;
 
 DO $$ BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='driver_balances'
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'driver_balances'
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.driver_balances;
   END IF;
@@ -921,520 +1425,171 @@ END $$;
 
 DO $$ BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='fee_payments'
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'fee_payments'
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.fee_payments;
   END IF;
 END $$;
 
 -- =============================================================================
--- STORAGE (ARMAZENAMENTO DE ARQUIVOS)
+-- STORAGE BUCKETS
 -- =============================================================================
 
--- Criar bucket para avatars
-INSERT INTO storage.buckets (id, name, public) VALUES ('avatars', 'avatars', TRUE)
-ON CONFLICT (id) DO NOTHING;
+-- Bucket para avatars
+INSERT INTO storage.buckets (id, name, public)
+SELECT 'avatars', 'avatars', true
+WHERE NOT EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'avatars');
 
--- Políticas para storage.objects
+-- Políticas para storage de avatars
 DO $$ BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE schemaname='storage' AND tablename='objects' AND polname='Public can read avatars'
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'storage' AND tablename = 'objects' 
+    AND polname = 'Avatar images are publicly accessible'
   ) THEN
-    CREATE POLICY "Public can read avatars"
-      ON storage.objects
-      FOR SELECT
+    CREATE POLICY "Avatar images are publicly accessible"
+      ON storage.objects FOR SELECT
       USING (bucket_id = 'avatars');
   END IF;
 END $$;
 
 DO $$ BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE schemaname='storage' AND tablename='objects' AND polname='Authenticated can upload avatars'
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'storage' AND tablename = 'objects' 
+    AND polname = 'Users can upload their own avatar'
   ) THEN
-    CREATE POLICY "Authenticated can upload avatars"
-      ON storage.objects
-      FOR INSERT
-      TO authenticated
-      WITH CHECK (bucket_id = 'avatars');
+    CREATE POLICY "Users can upload their own avatar"
+      ON storage.objects FOR INSERT
+      WITH CHECK (bucket_id = 'avatars' AND auth.uid()::text = (storage.foldername(name))[1]);
   END IF;
 END $$;
 
 DO $$ BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE schemaname='storage' AND tablename='objects' AND polname='Users can update their own avatar'
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'storage' AND tablename = 'objects' 
+    AND polname = 'Users can update their own avatar'
   ) THEN
     CREATE POLICY "Users can update their own avatar"
-      ON storage.objects
-      FOR UPDATE
-      TO authenticated
-      USING (bucket_id = 'avatars' AND owner = auth.uid()::TEXT)
-      WITH CHECK (bucket_id = 'avatars' AND owner = auth.uid()::TEXT);
+      ON storage.objects FOR UPDATE
+      USING (bucket_id = 'avatars' AND auth.uid()::text = (storage.foldername(name))[1]);
   END IF;
 END $$;
 
 DO $$ BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE schemaname='storage' AND tablename='objects' AND polname='Users can delete their own avatar'
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'storage' AND tablename = 'objects' 
+    AND polname = 'Users can delete their own avatar'
   ) THEN
     CREATE POLICY "Users can delete their own avatar"
-      ON storage.objects
-      FOR DELETE
-      TO authenticated
-      USING (bucket_id = 'avatars' AND owner = auth.uid()::TEXT);
+      ON storage.objects FOR DELETE
+      USING (bucket_id = 'avatars' AND auth.uid()::text = (storage.foldername(name))[1]);
   END IF;
 END $$;
 
 -- =============================================================================
--- FUNÇÕES CRÍTICAS DO SISTEMA
+-- CRON JOBS
 -- =============================================================================
 
--- Função para calcular saldo do motorista
-CREATE OR REPLACE FUNCTION public.calculate_driver_balance(p_driver_id uuid)
-RETURNS public.driver_balances
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-DECLARE
-  v_balance public.driver_balances;
-  v_total_earnings numeric(14,2) := 0;
-  v_paid_withdrawals numeric(14,2) := 0;
-  v_paid_fees numeric(14,2) := 0;
-  v_reserved numeric(14,2) := 0;
-BEGIN
-  -- Calcula total de ganhos das corridas completadas
-  SELECT COALESCE(SUM(COALESCE(actual_price, estimated_price)), 0)
-  INTO v_total_earnings
-  FROM public.rides
-  WHERE driver_id = p_driver_id AND status = 'completed';
+-- Remover cron job existente se houver
+SELECT cron.unschedule('projetoAtivo');
 
-  -- Calcula total de saques pagos
-  SELECT COALESCE(SUM(amount), 0)
-  INTO v_paid_withdrawals
-  FROM public.driver_payout_requests
-  WHERE driver_id = p_driver_id AND status = 'paid';
-
-  -- Calcula total de taxas pagas (NOVA DEDUÇÃO)
-  SELECT COALESCE(SUM(amount), 0)
-  INTO v_paid_fees
-  FROM public.fee_payments
-  WHERE driver_id = p_driver_id AND status = 'paid';
-
-  -- Calcula reservado para taxas pendentes/expiradas
-  SELECT COALESCE(SUM(amount), 0)
-  INTO v_reserved
-  FROM public.fee_payments
-  WHERE driver_id = p_driver_id AND status IN ('pending', 'expired');
-
-  -- Insere ou atualiza saldo: disponível = ganhos - saques pagos - taxas pagas - reservado
-  INSERT INTO public.driver_balances (driver_id, total_earnings, available, reserved)
-  VALUES (p_driver_id, v_total_earnings, GREATEST(0, v_total_earnings - v_paid_withdrawals - v_paid_fees - v_reserved), v_reserved)
-  ON CONFLICT (driver_id) DO UPDATE SET
-    total_earnings = EXCLUDED.total_earnings,
-    available = GREATEST(0, EXCLUDED.total_earnings - v_paid_withdrawals - v_paid_fees - EXCLUDED.reserved),
-    reserved = EXCLUDED.reserved,
-    updated_at = now()
-  RETURNING * INTO v_balance;
-
-  RETURN v_balance;
-END
-$$;
-
--- Função para calcular taxa de serviço
-CREATE OR REPLACE FUNCTION public.calculate_service_fee(p_driver_id uuid, p_available_balance numeric)
-RETURNS numeric
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-DECLARE
-  v_settings record;
-  v_fee_amount numeric(14,2) := 0;
-BEGIN
-  -- Buscar configurações de preço mais recentes
-  SELECT service_fee_type, service_fee_value
-  INTO v_settings
-  FROM public.pricing_settings
-  ORDER BY created_at DESC
-  LIMIT 1;
-  
-  -- Se não houver configurações, retorna 0
-  IF NOT FOUND OR v_settings.service_fee_value IS NULL THEN
-    RETURN 0;
-  END IF;
-  
-  -- Calcular taxa baseada no tipo
-  IF v_settings.service_fee_type = 'fixed' THEN
-    v_fee_amount := v_settings.service_fee_value;
-  ELSIF v_settings.service_fee_type = 'percent' THEN
-    -- Calcular porcentagem sobre o saldo disponível
-    v_fee_amount := p_available_balance * (v_settings.service_fee_value / 100);
-  END IF;
-  
-  -- Garantir que não seja negativo e não exceda o saldo disponível
-  RETURN GREATEST(0, LEAST(v_fee_amount, p_available_balance));
-END
-$$;
-
--- Função para solicitar pagamento de taxa
-CREATE OR REPLACE FUNCTION public.request_fee_payment()
-RETURNS public.fee_payments
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-DECLARE
-  v_driver_id uuid := auth.uid();
-  v_balance public.driver_balances;
-  v_payment public.fee_payments;
-  v_profile_created_at timestamptz;
-  v_now timestamptz := now();
-  v_fee_amount numeric(14,2);
-  v_initial_due_date timestamptz;
-  v_available_balance numeric(14,2);
-BEGIN
-  IF v_driver_id IS NULL THEN
-    RAISE EXCEPTION 'not_authenticated';
-  END IF;
-
-  -- Verifica se é um motorista
-  IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = v_driver_id AND user_type = 'driver') THEN
-    RAISE EXCEPTION 'not_a_driver';
-  END IF;
-
-  -- Busca data de criação do perfil
-  SELECT created_at INTO v_profile_created_at
-  FROM public.profiles
-  WHERE id = v_driver_id;
-
-  v_initial_due_date := v_profile_created_at + interval '2 days';
-
-  -- Verifica se ainda está no prazo para solicitar (2 dias após cadastro)
-  IF v_now > v_initial_due_date THEN
-    RAISE EXCEPTION 'initial_deadline_expired';
-  END IF;
-
-  -- Calcula e obtém saldo atual
-  SELECT * INTO v_balance FROM public.calculate_driver_balance(v_driver_id);
-  v_available_balance := v_balance.available;
-
-  -- Verifica se tem saldo disponível
-  IF v_available_balance <= 0 THEN
-    RAISE EXCEPTION 'no_available_funds';
-  END IF;
-
-  -- Calcula taxa baseada no saldo disponível
-  v_fee_amount := public.calculate_service_fee(v_driver_id, v_available_balance);
-  
-  -- Verifica se a taxa calculada é maior que zero
-  IF v_fee_amount <= 0 THEN
-    RAISE EXCEPTION 'invalid_fee_amount';
-  END IF;
-
-  -- NOVA LÓGICA: Zerar todo o saldo disponível
-  -- Todo o saldo disponível vai para reservado, mas só a taxa é paga
-  UPDATE public.driver_balances
-  SET available = 0,
-      reserved = reserved + v_available_balance
-  WHERE driver_id = v_driver_id;
-
-  -- Cria fee_payment com informações detalhadas
-  INSERT INTO public.fee_payments (
-    driver_id, 
-    amount, 
-    status, 
-    initial_due_date, 
-    payment_due_date,
-    available_balance_before,
-    actual_fee_amount
-  )
-  VALUES (
-    v_driver_id, 
-    v_available_balance,  -- O valor total reservado é o saldo disponível
-    'pending', 
-    v_initial_due_date, 
-    v_now + interval '2 days',
-    v_available_balance,  -- Saldo antes da solicitação
-    v_fee_amount          -- Valor real da taxa
-  )
-  RETURNING * INTO v_payment;
-
-  RETURN v_payment;
-END
-$$;
-
--- Função para marcar taxa como paga
-CREATE OR REPLACE FUNCTION public.mark_fee_paid(p_fee_id uuid)
-RETURNS public.fee_payments
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-DECLARE
-  v_payment public.fee_payments;
-BEGIN
-  -- Verifica se é admin
-  IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND user_type = 'admin') THEN
-    RAISE EXCEPTION 'unauthorized';
-  END IF;
-
-  SELECT * INTO v_payment FROM public.fee_payments WHERE id = p_fee_id FOR UPDATE;
-  IF NOT FOUND THEN RAISE EXCEPTION 'fee_not_found'; END IF;
-  
-  IF v_payment.status NOT IN ('pending', 'expired') THEN
-    RAISE EXCEPTION 'invalid_status';
-  END IF;
-
-  -- Liberar apenas o que sobrou após deduzir a taxa
-  -- amount = saldo total reservado, actual_fee_amount = taxa paga
-  UPDATE public.driver_balances
-  SET reserved = GREATEST(reserved - v_payment.amount, 0),
-      available = available + GREATEST(v_payment.amount - v_payment.actual_fee_amount, 0)
-  WHERE driver_id = v_payment.driver_id;
-
-  UPDATE public.fee_payments
-  SET status = 'paid',
-      paid_at = now()
-  WHERE id = p_fee_id
-  RETURNING * INTO v_payment;
-
-  RETURN v_payment;
-END
-$$;
-
--- Função para cancelar taxa
-CREATE OR REPLACE FUNCTION public.cancel_fee(p_fee_id uuid, p_reason text)
-RETURNS public.fee_payments
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-DECLARE
-  v_payment public.fee_payments;
-BEGIN
-  -- Verifica se é admin
-  IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND user_type = 'admin') THEN
-    RAISE EXCEPTION 'unauthorized';
-  END IF;
-
-  SELECT * INTO v_payment FROM public.fee_payments WHERE id = p_fee_id FOR UPDATE;
-  IF NOT FOUND THEN RAISE EXCEPTION 'fee_not_found'; END IF;
-  
-  IF v_payment.status NOT IN ('pending', 'expired') THEN
-    RAISE EXCEPTION 'invalid_status';
-  END IF;
-
-  -- Reverte a reserva para available
-  UPDATE public.driver_balances
-  SET reserved  = GREATEST(reserved - v_payment.amount, 0),
-      available = available + v_payment.amount
-  WHERE driver_id = v_payment.driver_id;
-
-  UPDATE public.fee_payments
-  SET status          = 'canceled',
-      canceled_at     = now(),
-      canceled_reason = p_reason
-  WHERE id = p_fee_id
-  RETURNING * INTO v_payment;
-
-  RETURN v_payment;
-END
-$$;
-
--- Função trigger para atualizar saldo quando status de taxa muda
-CREATE OR REPLACE FUNCTION public.update_driver_balance_on_fee_status_change()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-BEGIN
-  -- Recalcular saldo quando status da taxa mudar para 'paid' ou 'canceled'
-  IF (NEW.status != OLD.status) AND (NEW.status IN ('paid', 'canceled')) THEN
-    PERFORM public.calculate_driver_balance(NEW.driver_id);
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
--- Função trigger para atualizar saldo quando corrida é completada
-CREATE OR REPLACE FUNCTION public.update_driver_balance_on_ride_completion()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-BEGIN
-  -- Se mudou para 'completed', atualiza o saldo do motorista
-  IF NEW.status = 'completed' AND OLD.status != 'completed' AND NEW.driver_id IS NOT NULL THEN
-    PERFORM public.calculate_driver_balance(NEW.driver_id);
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
--- Função trigger para definir preço real automaticamente
-CREATE OR REPLACE FUNCTION public.set_actual_price_on_completion()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-BEGIN
-  -- Se a corrida está sendo marcada como completed e não tem actual_price definido
-  IF NEW.status = 'completed' AND OLD.status != 'completed' AND NEW.actual_price IS NULL THEN
-    NEW.actual_price = NEW.estimated_price;
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
--- Função trigger alternativa para atualização de saldo após completar corrida
-CREATE OR REPLACE FUNCTION public.update_driver_balance_on_completion()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-BEGIN
-  -- Se a corrida foi marcada como completed e tem driver_id
-  IF NEW.status = 'completed' AND OLD.status != 'completed' AND NEW.driver_id IS NOT NULL THEN
-    -- Chama a função para recalcular saldos
-    PERFORM public.calculate_driver_balance(NEW.driver_id);
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
--- =============================================================================
--- TRIGGERS DO SISTEMA
--- =============================================================================
-
--- Trigger para definir preço real antes de completar corrida
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='set_actual_price_before_completion') THEN
-    CREATE TRIGGER set_actual_price_before_completion
-      BEFORE UPDATE ON public.rides
-      FOR EACH ROW EXECUTE FUNCTION public.set_actual_price_on_completion();
-  END IF;
-END $$;
-
--- Trigger para atualizar saldo após completar corrida
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='update_balance_after_completion') THEN
-    CREATE TRIGGER update_balance_after_completion
-      AFTER UPDATE ON public.rides
-      FOR EACH ROW EXECUTE FUNCTION public.update_driver_balance_on_completion();
-  END IF;
-END $$;
-
--- Trigger para atualizar saldo quando status de fee muda
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='update_balance_on_fee_change') THEN
-    CREATE TRIGGER update_balance_on_fee_change
-      AFTER UPDATE ON public.fee_payments
-      FOR EACH ROW EXECUTE FUNCTION public.update_driver_balance_on_fee_status_change();
-  END IF;
-END $$;
+-- Agendar cron job projetoAtivo (executa a cada 5 dias às 00:00)
+SELECT cron.schedule(
+  'projetoAtivo',
+  '0 0 */5 * *',
+  'SELECT inserir_3x_e_parar();'
+);
 
 -- =============================================================================
 -- DADOS INICIAIS (SEED DATA)
 -- =============================================================================
 
--- Inserir configuração inicial do admin (placeholder)
+-- Dados iniciais para pricing_settings
+INSERT INTO public.pricing_settings (price_per_km, fixed_price, price_per_km_active, fixed_price_active, service_fee_type, service_fee_value, singleton)
+SELECT 2.50, NULL, TRUE, FALSE, 'fixed', 0, TRUE
+WHERE NOT EXISTS (SELECT 1 FROM public.pricing_settings);
+
+-- Dados iniciais para admin_setup
 INSERT INTO public.admin_setup (admin_user_id, password_set)
-VALUES ('00000000-0000-0000-0000-000000000000', FALSE)
-ON CONFLICT (admin_user_id) DO NOTHING;
+SELECT '00000000-0000-0000-0000-000000000000', FALSE
+WHERE NOT EXISTS (SELECT 1 FROM public.admin_setup);
 
 -- =============================================================================
--- VERIFICAÇÃO E COMENTÁRIOS FINAIS
+-- VERIFICAÇÃO FINAL
 -- =============================================================================
 
--- Comentários explicativos para as principais tabelas
-COMMENT ON TABLE public.profiles IS 'Perfis de usuários do sistema (passageiros, motoristas e administradores)';
-COMMENT ON TABLE public.driver_details IS 'Detalhes específicos dos motoristas (veículo, licença, etc.)';
-COMMENT ON TABLE public.locations IS 'Localizações em tempo real dos usuários para rastreamento';
-COMMENT ON TABLE public.rides IS 'Registro de todas as corridas solicitadas e realizadas';
-COMMENT ON TABLE public.chat_messages IS 'Mensagens de chat entre motoristas e passageiros durante corridas ativas';
-COMMENT ON TABLE public.pricing_settings IS 'Configurações globais de preços e taxas do sistema';
-COMMENT ON TABLE public.driver_payout_requests IS 'Solicitações de pagamento dos motoristas';
-COMMENT ON TABLE public.ride_ratings IS 'Avaliações dos passageiros sobre os motoristas';
-COMMENT ON TABLE public.driver_passenger_ratings IS 'Avaliações dos motoristas sobre os passageiros';
-COMMENT ON TABLE public.admin_setup IS 'Configuração inicial do sistema para administradores';
-COMMENT ON TABLE public.driver_balances IS 'Sistema de saldos e controle financeiro dos motoristas';
-COMMENT ON TABLE public.fee_payments IS 'Sistema de pagamento de taxas de serviço dos motoristas';
-
--- Verificação de integridade
 DO $$
 DECLARE
-    table_count INTEGER;
-    function_count INTEGER;
-    trigger_count INTEGER;
+  table_count INTEGER;
+  function_count INTEGER;
+  trigger_count INTEGER;
+  policy_count INTEGER;
+  cron_count INTEGER;
 BEGIN
-    -- Contar tabelas criadas (agora são 12 tabelas)
-    SELECT COUNT(*) INTO table_count 
-    FROM information_schema.tables 
-    WHERE table_schema = 'public' 
+  -- Contar tabelas criadas
+  SELECT COUNT(*) INTO table_count
+  FROM information_schema.tables
+  WHERE table_schema = 'public'
     AND table_name IN (
-        'profiles', 'admin_setup', 'driver_details', 'pricing_settings', 
-        'locations', 'rides', 'ride_ratings', 'driver_passenger_ratings', 
-        'driver_payout_requests', 'chat_messages', 'driver_balances', 'fee_payments'
+      'profiles', 'admin_setup', 'driver_details', 'pricing_settings',
+      'locations', 'rides', 'ride_ratings', 'driver_passenger_ratings',
+      'driver_payout_requests', 'driver_balances', 'fee_payments',
+      'chat_messages', 'subscription_plans', 'subscription_requests',
+      'driver_subscriptions', 'bd_ativo'
     );
-    
-    -- Contar funções criadas (agora são 11 funções)
-    SELECT COUNT(*) INTO function_count 
-    FROM information_schema.routines 
-    WHERE routine_schema = 'public' 
-    AND routine_name IN (
-        'set_updated_at', 'handle_new_user', 'calculate_driver_balance', 
-        'calculate_service_fee', 'request_fee_payment', 'mark_fee_paid', 
-        'cancel_fee', 'update_driver_balance_on_fee_status_change',
-        'update_driver_balance_on_ride_completion', 'set_actual_price_on_completion',
-        'update_driver_balance_on_completion'
+
+  -- Contar funções criadas
+  SELECT COUNT(*) INTO function_count
+  FROM pg_proc p
+  JOIN pg_namespace n ON p.pronamespace = n.oid
+  WHERE n.nspname = 'public'
+    AND p.proname IN (
+      'set_updated_at', 'handle_new_user', 'inserir_3x_e_parar',
+      'calculate_driver_balance', 'request_fee_payment', 'mark_fee_paid',
+      'cancel_fee', 'request_subscription_renewal', 'approve_subscription_payment',
+      'get_driver_subscription_status'
     );
-    
-    -- Contar triggers criados
-    SELECT COUNT(*) INTO trigger_count 
-    FROM information_schema.triggers 
-    WHERE trigger_schema = 'public';
-    
-    -- Relatório de verificação
-    RAISE NOTICE '=== VERIFICAÇÃO DE MIGRAÇÃO COMPLETA ===';
-    RAISE NOTICE 'Tabelas criadas: % de 12 esperadas', table_count;
-    RAISE NOTICE 'Funções criadas: % de 11 esperadas', function_count;
-    RAISE NOTICE 'Triggers criados: % triggers', trigger_count;
-    
-    IF table_count = 12 AND function_count = 11 THEN
-        RAISE NOTICE '✅ Migração executada com SUCESSO COMPLETO!';
-        RAISE NOTICE '✅ Sistema de fees e saldos configurado!';
-        RAISE NOTICE '✅ Todas as funções críticas implementadas!';
-    ELSE
-        RAISE WARNING '⚠️  Verifique se todas as tabelas e funções foram criadas corretamente';
-        RAISE NOTICE 'Esperado: 12 tabelas, % encontradas', table_count;
-        RAISE NOTICE 'Esperado: 11 funções, % encontradas', function_count;
-    END IF;
+
+  -- Contar triggers criados
+  SELECT COUNT(*) INTO trigger_count
+  FROM pg_trigger
+  WHERE tgname LIKE '%_set_updated_at' OR tgname = 'on_auth_user_created';
+
+  -- Contar políticas RLS
+  SELECT COUNT(*) INTO policy_count
+  FROM pg_policies
+  WHERE schemaname = 'public';
+
+  -- Contar cron jobs
+  SELECT COUNT(*) INTO cron_count
+  FROM cron.job
+  WHERE jobname = 'projetoAtivo';
+
+  -- Exibir resultados
+  RAISE NOTICE '=============================================================================';
+  RAISE NOTICE 'BACKUP COMPLETO EXECUTADO COM SUCESSO!';
+  RAISE NOTICE '=============================================================================';
+  RAISE NOTICE 'Tabelas criadas: % de 16', table_count;
+  RAISE NOTICE 'Funções criadas: % de 10+', function_count;
+  RAISE NOTICE 'Triggers criados: %', trigger_count;
+  RAISE NOTICE 'Políticas RLS criadas: %', policy_count;
+  RAISE NOTICE 'Cron jobs agendados: %', cron_count;
+  RAISE NOTICE '=============================================================================';
+
+  -- Verificar se tudo foi criado corretamente
+  IF table_count = 16 AND function_count >= 10 AND cron_count = 1 THEN
+    RAISE NOTICE 'STATUS: ✅ TODOS OS COMPONENTES FORAM CRIADOS COM SUCESSO!';
+  ELSE
+    RAISE WARNING 'STATUS: ⚠️  ALGUNS COMPONENTES PODEM NÃO TER SIDO CRIADOS CORRETAMENTE';
+  END IF;
+  
+  RAISE NOTICE '=============================================================================';
 END $$;
 
 -- =============================================================================
--- FINALIZAÇÃO
+-- FIM DO BACKUP
 -- =============================================================================
-
--- Este backup contém:
--- ✅ 12 tabelas principais do sistema (incluindo driver_balances e fee_payments)
--- ✅ 2 tipos customizados (payout_status e fee_status)
--- ✅ 11 funções críticas do sistema incluindo:
---   • Funções utilitárias (set_updated_at, handle_new_user)
---   • Sistema de saldos (calculate_driver_balance, calculate_service_fee)
---   • Sistema de fees (request_fee_payment, mark_fee_paid, cancel_fee)  
---   • Triggers functions (update_driver_balance_*, set_actual_price_*)
--- ✅ Todas as políticas RLS necessárias para segurança
--- ✅ Triggers para updated_at automático e atualizações de saldo
--- ✅ Índices para otimização de performance
--- ✅ Configurações de tempo real (realtime) para todas as tabelas críticas
--- ✅ Bucket de storage para avatars com políticas apropriadas
--- ✅ Sistema completo de fees e saldos operacional
--- ✅ Dados iniciais (seed data)
--- ✅ Verificação de integridade completa
--- ✅ Comentários e documentação detalhada
-
-SELECT 'Backup COMPLETO do banco de dados criado com sucesso! Sistema de fees implementado! 🚀'
