@@ -261,7 +261,15 @@ export type Database = {
           status?: Database["public"]["Enums"]["subscription_status"] | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_driver_subscriptions_plan"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       fee_payments: {
         Row: {
@@ -597,7 +605,22 @@ export type Database = {
           requested_at?: string | null
           status?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_subscription_requests_current_subscription"
+            columns: ["current_subscription_id"]
+            isOneToOne: false
+            referencedRelation: "driver_subscriptions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_subscription_requests_plan"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
@@ -718,7 +741,11 @@ export type Database = {
     Enums: {
       fee_status: "not_requested" | "pending" | "paid" | "canceled" | "expired"
       payout_status: "pending" | "approved" | "rejected" | "paid"
-      subscription_status: "ativa" | "vencida" | "cancelada" | "pendente"
+      subscription_status:
+        | "ativa"
+        | "vencida"
+        | "bloqueada"
+        | "renovacao_solicitada"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -848,7 +875,12 @@ export const Constants = {
     Enums: {
       fee_status: ["not_requested", "pending", "paid", "canceled", "expired"],
       payout_status: ["pending", "approved", "rejected", "paid"],
-      subscription_status: ["ativa", "vencida", "cancelada", "pendente"],
+      subscription_status: [
+        "ativa",
+        "vencida",
+        "bloqueada",
+        "renovacao_solicitada",
+      ],
     },
   },
 } as const
