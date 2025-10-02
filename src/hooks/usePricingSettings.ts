@@ -2,11 +2,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import type { ServiceType } from '@/types';
 
 export type ServiceFeeType = 'fixed' | 'percent';
 
 export interface PricingSettings {
   id?: string;
+  service_type: ServiceType;
   price_per_km_active: boolean;
   price_per_km: number;
   fixed_price_active: boolean;
@@ -42,9 +44,11 @@ export const usePricingSettings = () => {
   const [loading, setLoading] = useState(true);
 
   const fetchSettings = async () => {
+    // Busca config para moto_taxi por padrão (backward compatibility)
     const { data, error } = await supabase
       .from('pricing_settings')
       .select('*')
+      .eq('service_type', 'moto_taxi')
       .order('created_at', { ascending: false })
       .limit(1);
 
@@ -56,6 +60,7 @@ export const usePricingSettings = () => {
       if (row) {
         setSettings({
           id: row.id,
+          service_type: row.service_type as ServiceType,
           price_per_km_active: !!row.price_per_km_active,
           price_per_km: Number(row.price_per_km ?? 0),
           fixed_price_active: !!row.fixed_price_active,
@@ -92,6 +97,8 @@ export const usePricingSettings = () => {
 
   const saveSettings = async (patch: Partial<PricingSettings>) => {
     if (!user) throw new Error('Not authenticated');
+    const serviceType = patch.service_type || settings?.service_type || 'moto_taxi';
+    
     // If exists, update; else insert
     if (settings?.id) {
       const { error } = await supabase
@@ -107,7 +114,8 @@ export const usePricingSettings = () => {
       const { error } = await supabase
         .from('pricing_settings')
         .insert([{
-          singleton: true,
+          service_type: serviceType,
+          singleton: false,
           price_per_km_active: patch.price_per_km_active ?? true,
           price_per_km: patch.price_per_km ?? 2.5,
           fixed_price_active: patch.fixed_price_active ?? false,
@@ -124,6 +132,7 @@ export const usePricingSettings = () => {
   };
 
   const defaultPreview = useMemo<PricingSettings>(() => ({
+    service_type: 'moto_taxi',
     price_per_km_active: true,
     price_per_km: 2.5,
     fixed_price_active: false,

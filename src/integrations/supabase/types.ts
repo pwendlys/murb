@@ -366,6 +366,7 @@ export type Database = {
           price_per_km_active: boolean | null
           service_fee_type: string | null
           service_fee_value: number | null
+          service_type: Database["public"]["Enums"]["service_type"]
           singleton: boolean | null
           updated_at: string | null
           updated_by: string | null
@@ -379,6 +380,7 @@ export type Database = {
           price_per_km_active?: boolean | null
           service_fee_type?: string | null
           service_fee_value?: number | null
+          service_type?: Database["public"]["Enums"]["service_type"]
           singleton?: boolean | null
           updated_at?: string | null
           updated_by?: string | null
@@ -392,6 +394,7 @@ export type Database = {
           price_per_km_active?: boolean | null
           service_fee_type?: string | null
           service_fee_value?: number | null
+          service_type?: Database["public"]["Enums"]["service_type"]
           singleton?: boolean | null
           updated_at?: string | null
           updated_by?: string | null
@@ -488,6 +491,7 @@ export type Database = {
           passenger_id: string
           payment_method: string | null
           pickup_arrived_at: string | null
+          service_type: Database["public"]["Enums"]["service_type"]
           started_at: string | null
           status: string | null
           updated_at: string | null
@@ -515,6 +519,7 @@ export type Database = {
           passenger_id: string
           payment_method?: string | null
           pickup_arrived_at?: string | null
+          service_type?: Database["public"]["Enums"]["service_type"]
           started_at?: string | null
           status?: string | null
           updated_at?: string | null
@@ -542,6 +547,7 @@ export type Database = {
           passenger_id?: string
           payment_method?: string | null
           pickup_arrived_at?: string | null
+          service_type?: Database["public"]["Enums"]["service_type"]
           started_at?: string | null
           status?: string | null
           updated_at?: string | null
@@ -755,6 +761,11 @@ export type Database = {
     Enums: {
       fee_status: "not_requested" | "pending" | "paid" | "canceled" | "expired"
       payout_status: "pending" | "approved" | "rejected" | "paid"
+      service_type:
+        | "moto_taxi"
+        | "passenger_car"
+        | "delivery_bike"
+        | "delivery_car"
       subscription_status:
         | "ativa"
         | "vencida"
@@ -889,6 +900,12 @@ export const Constants = {
     Enums: {
       fee_status: ["not_requested", "pending", "paid", "canceled", "expired"],
       payout_status: ["pending", "approved", "rejected", "paid"],
+      service_type: [
+        "moto_taxi",
+        "passenger_car",
+        "delivery_bike",
+        "delivery_car",
+      ],
       subscription_status: [
         "ativa",
         "vencida",

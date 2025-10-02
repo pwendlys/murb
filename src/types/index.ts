@@ -1,6 +1,8 @@
 
 export type UserType = 'passenger' | 'driver' | 'admin';
 
+export type ServiceType = 'moto_taxi' | 'passenger_car' | 'delivery_bike' | 'delivery_car';
+
 export type RideStatus = 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
 
 export type PayoutStatus = 'pending' | 'approved' | 'rejected' | 'paid';
@@ -32,6 +34,7 @@ export interface Ride {
   destination_lat: number;
   destination_lng: number;
   status: RideStatus;
+  service_type: ServiceType;
   estimated_duration: number | null;
   estimated_distance: number | null;
   estimated_price: number | null;
