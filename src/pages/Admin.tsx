@@ -14,7 +14,9 @@ import EarningsHistory from '@/components/admin/EarningsHistory';
 import { SubscriptionDashboard } from '@/components/admin/SubscriptionDashboard';
 import { SubscriptionManagement } from '@/components/admin/SubscriptionManagement';
 import { ServicePricingManager } from '@/components/admin/ServicePricingManager';
+import { AvailabilityRulesManager } from '@/components/admin/AvailabilityRulesManager';
 import { useFeatureFlags } from '@/hooks/useFeatureFlags';
+import { logTelemetry } from '@/lib/telemetry';
 
 const Admin = () => {
   const { profile, loading, signOut } = useAuth();
@@ -69,10 +71,15 @@ const Admin = () => {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="settings">
-            <TabsList className={`grid w-full ${flags.adminServicePricing ? 'grid-cols-7' : 'grid-cols-6'}`}>
+            <TabsList className={`grid w-full ${flags.adminServicePricing && flags.availabilityRules ? 'grid-cols-8' : flags.adminServicePricing || flags.availabilityRules ? 'grid-cols-7' : 'grid-cols-6'}`}>
               <TabsTrigger value="settings">Configurações de Preço</TabsTrigger>
               {flags.adminServicePricing && (
                 <TabsTrigger value="service-pricing">Preços por Serviço</TabsTrigger>
+              )}
+              {flags.availabilityRules && (
+                <TabsTrigger value="availability" onClick={() => logTelemetry({ event: 'admin_tab_opened', data: { tab: 'availability' } })}>
+                  Regras de Disponibilidade
+                </TabsTrigger>
               )}
               <TabsTrigger value="users">Usuários</TabsTrigger>
               <TabsTrigger value="rides">Histórico de Corridas</TabsTrigger>
@@ -88,6 +95,12 @@ const Admin = () => {
             {flags.adminServicePricing && (
               <TabsContent value="service-pricing" className="pt-4">
                 <ServicePricingManager />
+              </TabsContent>
+            )}
+
+            {flags.availabilityRules && (
+              <TabsContent value="availability" className="pt-4">
+                <AvailabilityRulesManager />
               </TabsContent>
             )}
 

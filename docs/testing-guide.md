@@ -1,209 +1,260 @@
-# Guia de Testes - Etapa 3: UX/Ícones, Estabilidade e Polimento
+# Guia de Testes - Viaja+
 
-## Como Testar Localmente
+Este documento descreve como executar e validar os testes do projeto Viaja+.
 
-### 1. Ativar Feature Flags
+## Estrutura de Testes
 
-Edite o arquivo `.env`:
+O projeto possui dois tipos principais de testes:
 
+### 1. Testes Unitários (Vitest)
+Localizados em arquivos `.test.ts` e `.test.tsx` ao lado dos arquivos fonte.
+
+**Cobertura:**
+- Lógica de cálculo de preços (com surge)
+- Validações no admin
+- Hooks de disponibilidade e pricing
+- Componentes React (ServiceTypeSelector, etc.)
+- Utilitários de cache
+
+### 2. Testes E2E (Playwright)
+Localizados em `tests/e2e/`
+
+**Cenários cobertos:**
+- Seletor de tipo de serviço com disponibilidade
+- Fluxo de admin (acesso, tabs, telemetria)
+- Modo offline (banner, cache, ações bloqueadas)
+
+## Comandos
+
+```bash
+# Instalar dependências
+npm install
+
+# Testes unitários
+npm run test              # Executar todos os testes unitários
+npm run test:watch        # Modo watch
+npm run test:coverage     # Com cobertura de código
+
+# Testes E2E (Playwright)
+npx playwright install --with-deps  # Primeira vez apenas
+npm run test:e2e          # Executar testes E2E
+npx playwright test --ui  # Interface gráfica
+npx playwright test --headed --debug  # Debug mode
+npx playwright test --project=chromium  # Browser específico
+npx playwright show-report  # Ver relatório do último teste
+```
+
+## Feature Flags para QA
+
+Configure no arquivo `.env` para habilitar funcionalidades:
+
+### Etapa 2-3 (Service Types & Admin Pricing)
 ```env
-# Habilitar seleção de tipo de serviço
-VITE_ENABLE_SERVICE_TYPE_SELECTION=true
-
-# Habilitar painel admin de preços
 VITE_ENABLE_ADMIN_SERVICE_PRICING=true
-
-# Habilitar tipo "Carro Passageiro"
+VITE_ENABLE_SERVICE_TYPE_SELECTION=true
 VITE_ENABLE_PASSENGER_CAR=true
-
-# Habilitar tipos de entrega
 VITE_ENABLE_DELIVERY_SERVICES=true
 ```
 
-### 2. Acessar o App
+### Etapa 4 (Disponibilidade e Offline)
+```env
+VITE_ENABLE_E2E_FLOWS=true
+VITE_ENABLE_AVAILABILITY_RULES=true
+VITE_ENABLE_OFFLINE_CACHE=true
+VITE_ENABLE_OFFLINE_QUEUE=false  # Ainda não implementado
+```
 
-- **Passageiro:** Acesse `/map`
-- **Admin:** Acesse o painel administrativo
+### Etapa 5 (Filtros e Admin Consolidado)
+```env
+VITE_ENABLE_SERVICE_SELECTOR_AVAILABILITY=true
+VITE_ENABLE_ADMIN_TAB=true
+VITE_USE_QUERY_CLIENT=true
+VITE_ENABLE_SERVICE_WORKER=true
+VITE_FORCE_ADMIN=true  # Somente para QA local
+```
 
----
+## Cenários de Teste Manual
 
-## Checklist de QA - Service Type Selector
+### 1. Seletor de Serviço com Disponibilidade
 
-### Visibilidade e Feature Flags
+**Requisitos:**
+- `VITE_ENABLE_SERVICE_TYPE_SELECTION=true`
+- `VITE_ENABLE_SERVICE_SELECTOR_AVAILABILITY=true`
+- `VITE_ENABLE_AVAILABILITY_RULES=true`
+
+**Passos:**
+1. Acesse a página inicial
+2. Observe o seletor de tipo de serviço
+3. Serviços indisponíveis devem aparecer desabilitados (opacity reduzida)
+4. Ao passar o mouse/foco sobre item desabilitado, deve mostrar tooltip com motivo
+5. Tentar clicar em serviço desabilitado não deve mudá-lo
+6. Abra o console e verifique telemetria: `service_filtered_count`, `service_unavailable_click`
+
+### 2. Admin Tab Consolidada
+
+**Requisitos:**
+- `VITE_ENABLE_ADMIN_TAB=true`
+- `VITE_ENABLE_AVAILABILITY_RULES=true`
+- `VITE_FORCE_ADMIN=true` (para QA)
+
+**Passos:**
+1. Acesse `/sistema-interno-2024/painel` (ou caminho configurado)
+2. Veja abas: Configurações, Preços por Serviço, Regras de Disponibilidade, Usuários, etc.
+3. Clique na aba "Regras de Disponibilidade"
+4. Verifique telemetria: `admin_tab_opened`
+5. Edite uma regra e salve
+6. Verifique telemetria: `admin_availability_saved`
+
+### 3. Modo Offline
+
+**Requisitos:**
+- `VITE_ENABLE_OFFLINE_CACHE=true`
+- `VITE_ENABLE_SERVICE_WORKER=true`
+
+**Passos:**
+1. Visite a aplicação com internet conectada
+2. Aguarde carregamento completo (Service Worker instala)
+3. Abra DevTools → Application → Service Workers → verifique SW ativo
+4. DevTools → Network → selecione "Offline"
+5. Recarregue a página
+6. Deve aparecer banner: "Você está offline"
+7. Assets básicos e shell devem carregar
+8. Tentar criar ride/entrega deve mostrar mensagem de bloqueio
+9. Verifique telemetria no console: `sw_installed`, `sw_activated`, `offline_detected`, `response_cache_hit`
+
+### 4. React Query Cache
+
+**Requisitos:**
+- `VITE_USE_QUERY_CLIENT=true`
+
+**Passos:**
+1. Abra a aplicação em modo dev
+2. Veja painel React Query Devtools (canto inferior)
+3. Navegue entre telas
+4. Observe queries sendo cacheadas e reutilizadas
+5. Console deve logar cache hits/misses
+
+## Checklist de QA - Etapa 3
+
+### Service Type Selector
+
+#### Visibilidade e Feature Flags
 - [ ] **Flags OFF:** Seletor não aparece, app usa `moto_taxi` por padrão
 - [ ] **Flags ON:** Seletor aparece com tipos habilitados
 - [ ] **Flag `VITE_ENABLE_PASSENGER_CAR=false`:** "Carro Passageiro" não aparece
 - [ ] **Flag `VITE_ENABLE_DELIVERY_SERVICES=false`:** "Moto Flash" e "Car Flash" não aparecem
 
-### Funcionalidade Básica
+#### Funcionalidade Básica
 - [ ] Clicar em tipo de serviço: seleção muda visualmente
 - [ ] Tipo selecionado tem borda destacada e background diferenciado
 - [ ] Ícones corretos para cada tipo (Bike, Car, Package, Truck)
 - [ ] Labels amigáveis exibidos ("Moto Táxi", "Carro Passageiro", etc.)
 
-### Acessibilidade
+#### Acessibilidade
 - [ ] **Tab:** Navegar entre opções de serviço
 - [ ] **Enter/Space:** Selecionar tipo de serviço com teclado
 - [ ] **Aria-labels:** Cada opção tem descrição clara para screen readers
 - [ ] **Focus-visible:** Estado de foco bem visível ao navegar por teclado
 - [ ] **Role:** Elementos têm roles semânticos corretos
 
-### Preços Estimados
-- [ ] Preços exibidos quando origem e destino preenchidos
-- [ ] Preços diferentes por tipo de serviço (se configurado no admin)
-- [ ] Loading state visível enquanto calcula preços
-- [ ] Formato de moeda correto (R$ XX,XX)
+### Admin Pricing
 
-### Responsividade
-- [ ] Mobile: Grid de 2 colunas
-- [ ] Desktop: Grid de 4 colunas (se todos os tipos habilitados)
-- [ ] Layout não quebra em telas pequenas
-
----
-
-## Checklist de QA - Admin Pricing
-
-### Visibilidade e Permissões
+#### Visibilidade e Permissões
 - [ ] **Flag OFF:** Menu "Preços por Serviço" não aparece
 - [ ] **Flag ON:** Menu "Preços por Serviço" visível no admin
 - [ ] **Usuário não-admin:** Não consegue acessar a tela (redirect ou erro)
 - [ ] **Usuário admin:** Acessa normalmente
 
-### Listagem de Preços
-- [ ] Exibe os 4 tipos de serviço (se flags habilitados)
-- [ ] Ícones e cores consistentes com o seletor do app
-- [ ] Valores atuais exibidos corretamente
-- [ ] Botão "Editar Preços" para cada tipo
+#### Validações
+- [ ] Preço por km: valores < 0.50 ou > 50.00 exibem erro
+- [ ] Preço fixo: valores < 3.00 ou > 500.00 exibem erro
+- [ ] Taxa de serviço: validação de acordo com tipo (fixo/percentual)
+- [ ] Botão Salvar desabilitado quando há erros
+- [ ] Mensagens de erro inline e claras
 
-### Edição de Preços - Validações
-- [ ] **Preço por km (`price_per_km`):**
-  - [ ] Valor < 0.50: erro exibido
-  - [ ] Valor > 50.00: erro exibido
-  - [ ] Valor válido: salva sem erro
-- [ ] **Preço fixo (`fixed_price`):**
-  - [ ] Valor < 3.00: erro exibido (quando ativo)
-  - [ ] Valor > 500.00: erro exibido
-  - [ ] Desabilitado quando `fixed_price_active=false`
-- [ ] **Taxa de serviço (`service_fee_value`):**
-  - [ ] Valor < 0: erro exibido
-  - [ ] Valor > 100: erro exibido (se tipo for porcentagem)
-  - [ ] Validação respeita tipo (fixo vs percentual)
-- [ ] **Botão Salvar:**
-  - [ ] Desabilitado quando há erros de validação
-  - [ ] Habilitado quando todos os campos válidos
-- [ ] **Mensagens de erro:**
-  - [ ] Inline, próximas ao campo com erro
-  - [ ] Claras e amigáveis
+## Testes de Acessibilidade
 
-### Edição de Preços - Funcionalidade
-- [ ] Salvar: atualiza valores no banco de dados
-- [ ] Toast de sucesso exibido após salvar
-- [ ] Toast de erro exibido se falhar
-- [ ] Valores atualizados refletem imediatamente na listagem
-- [ ] Valores atualizados refletem no app (testar calculando nova corrida)
+Todos os componentes devem ser navegáveis por teclado:
 
-### Loading States
-- [ ] Loading skeleton enquanto carrega listagem
-- [ ] Loading no botão "Salvar" enquanto persiste
-- [ ] Empty state se não houver dados (edge case)
+- **Tab/Shift+Tab**: Navegar entre elementos
+- **Enter/Espaço**: Ativar botões/cards
+- **Esc**: Fechar modais
+- **Setas**: Navegar em RadioGroup
 
----
+Validar `aria-*` attributes:
+- `aria-label` em cards de serviço
+- `aria-disabled` em itens indisponíveis
+- `aria-live` para anúncios dinâmicos (offline, erros)
 
-## Checklist de QA - Integração End-to-End
+## Cobertura Mínima
 
-### Fluxo Completo: Passageiro
-1. [ ] Acessar `/map`
-2. [ ] Preencher origem e destino
-3. [ ] **Seletor aparece** com tipos habilitados
-4. [ ] Selecionar "Carro Passageiro"
-5. [ ] **Preço estimado atualiza** para o tipo selecionado
-6. [ ] Clicar "Solicitar Corrida"
-7. [ ] Verificar no banco: campo `service_type` = `passenger_car`
+- **Unit tests**: 80% dos módulos críticos (pricing, availability, validations)
+- **E2E tests**: Fluxos principais (selector, admin, offline)
 
-### Fluxo Completo: Admin → App
-1. [ ] Admin: acessar "Preços por Serviço"
-2. [ ] Editar "Moto Flash": alterar `price_per_km` para 3.00
-3. [ ] Salvar
-4. [ ] App: criar nova corrida de "Moto Flash"
-5. [ ] **Preço estimado reflete o novo valor** (3.00 * distância)
+## Troubleshooting
 
-### Fluxo Completo: Feature Flags OFF
-1. [ ] Desabilitar todas as flags no `.env`
-2. [ ] Reiniciar dev server
-3. [ ] Acessar `/map`: **seletor não aparece**
-4. [ ] App usa `moto_taxi` por padrão (comportamento antigo)
-5. [ ] Admin: menu "Preços por Serviço" **não aparece**
-6. [ ] Zero regressão: app funciona como antes da Etapa 2
+### Playwright
 
----
+**Erro: Browsers not installed**
+```bash
+npx playwright install --with-deps
+```
 
-## Checklist de QA - Telemetria
+**Trace/vídeo dos testes:**
+```bash
+npx playwright test --trace on
+npx playwright show-trace trace.zip
+```
 
-### Eventos Logados
-- [ ] **`service_type_selected`:** Ao trocar tipo no seletor
-  - [ ] Data: `{ service_type, context: 'ride_request' }`
-- [ ] **`pricing_viewed`:** Ao abrir listagem de preços no admin
-  - [ ] Data: `{ service_type }` (para cada tipo exibido)
-- [ ] **`admin_pricing_updated`:** Ao salvar preços no admin
-  - [ ] Data: `{ service_type, fields: ['price_per_km', ...] }`
+### Testes unitários
 
-### Console Logs
-- [ ] Abrir DevTools → Console
-- [ ] Eventos aparecem com prefixo `[Telemetry]`
-- [ ] Dados não contêm informações sensíveis (user IDs, tokens)
+**Erro: Cannot find module**
+Verifique `tsconfig.json` e aliases em `vite.config.ts`.
 
----
+**Timeout:**
+Aumente timeout nos testes:
+```typescript
+import { test } from 'vitest';
+test('my test', async () => { /* ... */ }, 10000); // 10s
+```
 
-## Checklist de QA - Segurança
+## CI/CD
 
-- [ ] **RLS Policies:** Apenas admin pode UPDATE `pricing_settings`
-- [ ] **Client-side:** Hook `useAuth` verifica permissões
-- [ ] **Inputs sanitizados:** Valores numéricos validados (min/max)
-- [ ] **Sem logs sensíveis:** Console não expõe dados críticos
+Os testes devem rodar no pipeline de CI:
+
+```yaml
+# .github/workflows/test.yml (exemplo)
+- run: npm run test
+- run: npx playwright test
+- uses: actions/upload-artifact@v3
+  with:
+    name: playwright-report
+    path: playwright-report/
+```
+
+## Telemetria Implementada (Etapa 5)
+
+- `service_filtered_count`: Quantos serviços foram filtrados no selector
+- `service_unavailable_click`: Usuário clicou em serviço indisponível
+- `admin_tab_opened`: Admin abriu uma aba específica
+- `admin_access_blocked`: Tentativa de acesso não autorizado
+- `admin_pricing_saved`: Admin salvou configuração de preço
+- `admin_availability_saved`: Admin salvou regra de disponibilidade
+- `sw_installed`: Service Worker instalado
+- `sw_activated`: Service Worker ativado
+- `response_cache_hit`: Resposta servida do cache do SW
+- `query_cache_hit`: Query hit no cache do React Query
+- `query_cache_miss`: Query miss no cache do React Query
+
+Todos os eventos são logados no console com prefixo `[Telemetry]`.
+
+## Próximos Passos
+
+- Adicionar testes de integração com backend (Supabase)
+- Expandir cobertura E2E para fluxos de delivery
+- Adicionar testes de performance (Lighthouse CI)
+- Implementar visual regression tests (Percy/Chromatic)
 
 ---
 
-## Testes Automatizados (Futuro)
-
-### Unit Tests (Vitest/Jest)
-- [ ] `serviceMetadata.ts`: validar estrutura de dados
-- [ ] `telemetry.ts`: validar formato de eventos
-- [ ] `usePricingSettings`: validar cálculo de preços por tipo
-- [ ] `useServicePricing`: validar fetch/update
-
-### Integration Tests
-- [ ] `ServiceTypeSelector`: renderização, navegação, estados
-- [ ] `ServicePricingEditModal`: validações, submit, erros
-- [ ] `RideRequest`: integração com seletor, cálculo de preços
-
-### E2E Tests (Playwright/Cypress)
-- [ ] Fluxo completo: selecionar tipo → criar corrida
-- [ ] Fluxo admin: editar preço → refletir no app
-
----
-
-## Como Reportar Bugs
-
-### Informações Necessárias
-1. **Feature flags ativas** (copiar `.env`)
-2. **Passos para reproduzir** (ex: "Ao clicar em 'Moto Flash'...")
-3. **Comportamento esperado** vs **comportamento observado**
-4. **Screenshots/vídeo** (se aplicável)
-5. **Console logs** (se houver erros)
-
-### Onde Reportar
-- Issues no repositório Git
-- Canal de QA no Slack/Discord
-- Ticket no sistema de gestão de projetos
-
----
-
-## Notas Finais
-
-- **Cobertura mínima:** 80% nos módulos tocados (meta)
-- **Prioridade:** Bugs críticos que bloqueiam fluxo principal
-- **Regressão:** Zero tolerância para quebra de funcionalidades existentes
-
----
-
-**Última atualização:** Etapa 3 - UX/Ícones, Estabilidade e Polimento
+**Última atualização:** Etapa 5 - Filtros, Admin Consolidado, QueryClient, Service Worker

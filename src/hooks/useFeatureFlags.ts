@@ -11,5 +11,12 @@ export const useFeatureFlags = () => {
     availabilityRules: import.meta.env.VITE_ENABLE_AVAILABILITY_RULES === 'true',
     offlineCache: import.meta.env.VITE_ENABLE_OFFLINE_CACHE === 'true',
     offlineQueue: import.meta.env.VITE_ENABLE_OFFLINE_QUEUE === 'true',
+    
+    // Etapa 5
+    serviceSelectorAvailability: import.meta.env.VITE_ENABLE_SERVICE_SELECTOR_AVAILABILITY === 'true',
+    adminTab: import.meta.env.VITE_ENABLE_ADMIN_TAB === 'true',
+    useQueryClient: import.meta.env.VITE_USE_QUERY_CLIENT === 'true',
+    enableServiceWorker: import.meta.env.VITE_ENABLE_SERVICE_WORKER === 'true',
+    forceAdmin: import.meta.env.VITE_FORCE_ADMIN === 'true',
   };
 };
