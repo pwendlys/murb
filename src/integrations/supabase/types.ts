@@ -472,6 +472,7 @@ export type Database = {
           actual_price: number | null
           completed_at: string | null
           created_at: string | null
+          delivery_notes: string | null
           destination_address: string
           destination_lat: number
           destination_lng: number
@@ -488,9 +489,12 @@ export type Database = {
           origin_address: string
           origin_lat: number
           origin_lng: number
+          package_description: string | null
           passenger_id: string
           payment_method: string | null
           pickup_arrived_at: string | null
+          recipient_name: string | null
+          recipient_phone: string | null
           service_type: Database["public"]["Enums"]["service_type"]
           started_at: string | null
           status: string | null
@@ -500,6 +504,7 @@ export type Database = {
           actual_price?: number | null
           completed_at?: string | null
           created_at?: string | null
+          delivery_notes?: string | null
           destination_address: string
           destination_lat: number
           destination_lng: number
@@ -516,9 +521,12 @@ export type Database = {
           origin_address: string
           origin_lat: number
           origin_lng: number
+          package_description?: string | null
           passenger_id: string
           payment_method?: string | null
           pickup_arrived_at?: string | null
+          recipient_name?: string | null
+          recipient_phone?: string | null
           service_type?: Database["public"]["Enums"]["service_type"]
           started_at?: string | null
           status?: string | null
@@ -528,6 +536,7 @@ export type Database = {
           actual_price?: number | null
           completed_at?: string | null
           created_at?: string | null
+          delivery_notes?: string | null
           destination_address?: string
           destination_lat?: number
           destination_lng?: number
@@ -544,13 +553,58 @@ export type Database = {
           origin_address?: string
           origin_lat?: number
           origin_lng?: number
+          package_description?: string | null
           passenger_id?: string
           payment_method?: string | null
           pickup_arrived_at?: string | null
+          recipient_name?: string | null
+          recipient_phone?: string | null
           service_type?: Database["public"]["Enums"]["service_type"]
           started_at?: string | null
           status?: string | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      service_availability_rules: {
+        Row: {
+          active: boolean | null
+          created_at: string | null
+          id: string
+          notes: string | null
+          region: string
+          service_type: Database["public"]["Enums"]["service_type"]
+          surge_multiplier: number | null
+          time_end: string
+          time_start: string
+          updated_at: string | null
+          weekday_mask: number[]
+        }
+        Insert: {
+          active?: boolean | null
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          region: string
+          service_type: Database["public"]["Enums"]["service_type"]
+          surge_multiplier?: number | null
+          time_end: string
+          time_start: string
+          updated_at?: string | null
+          weekday_mask: number[]
+        }
+        Update: {
+          active?: boolean | null
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          region?: string
+          service_type?: Database["public"]["Enums"]["service_type"]
+          surge_multiplier?: number | null
+          time_end?: string
+          time_start?: string
+          updated_at?: string | null
+          weekday_mask?: number[]
         }
         Relationships: []
       }

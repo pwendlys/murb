@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { MapPin, Navigation, Clock, DollarSign, Crosshair, CreditCard, Banknote, QrCode } from 'lucide-react';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { AddressAutocomplete } from '@/components/ui/address-autocomplete';
@@ -22,6 +24,9 @@ import { MotoNegociaOffer } from './MotoNegociaOffer';
 import { centsToReais } from '@/utils/currency';
 import { ServiceTypeSelector } from './ServiceTypeSelector';
 import { useFeatureFlags } from '@/hooks/useFeatureFlags';
+import { useAvailability } from '@/hooks/useAvailability';
+import { computePriceWithSurge } from '@/lib/pricing';
+import { logTelemetry } from '@/lib/telemetry';
 import type { ServiceType } from '@/types';
 
 export type RideType = 'normal' | 'negotiated';
@@ -57,6 +62,19 @@ export const RideRequest = ({ currentLocation, onDestinationUpdate, onOriginUpda
     delivery_car: null,
   });
   const [loadingPrices, setLoadingPrices] = useState(false);
+  
+  // Etapa 4: Campos de delivery
+  const [packageDescription, setPackageDescription] = useState('');
+  const [deliveryNotes, setDeliveryNotes] = useState('');
+  const [recipientName, setRecipientName] = useState('');
+  const [recipientPhone, setRecipientPhone] = useState('');
+  
+  // Etapa 4: Availability
+  const { data: availableServices, isLoading: loadingAvailability } = useAvailability(
+    'juiz_de_fora',
+    flags.availabilityRules ? new Date() : undefined
+  );
+  const availableTypes = availableServices?.map((s) => s.serviceType) || ['moto_taxi'];
 
   // Set current location address when available and user chooses to use it
   useEffect(() => {
@@ -296,6 +314,18 @@ export const RideRequest = ({ currentLocation, onDestinationUpdate, onOriginUpda
       toast.error('Por favor, selecione uma forma de pagamento');
       return;
     }
+    
+    // Validar campos obrigatórios para delivery
+    if (flags.e2eFlows && (serviceType === 'delivery_bike' || serviceType === 'delivery_car')) {
+      if (!packageDescription.trim()) {
+        toast.error('Descrição do pacote é obrigatória para entregas');
+        return;
+      }
+      if (!deliveryNotes.trim()) {
+        toast.error('Observações de entrega são obrigatórias');
+        return;
+      }
+    }
 
     setLoading(true);
     try {
@@ -320,7 +350,7 @@ export const RideRequest = ({ currentLocation, onDestinationUpdate, onOriginUpda
 
       const finalPrice = customPrice || rideDetails.price;
       
-      const { error } = await supabase.from('rides').insert({
+      const rideData: any = {
         passenger_id: user.id,
         origin_address: originAddress,
         destination_address: destination,
@@ -334,13 +364,25 @@ export const RideRequest = ({ currentLocation, onDestinationUpdate, onOriginUpda
         status: 'pending',
         payment_method: paymentMethod,
         service_type: serviceType
-      });
+      };
+      
+      // Adicionar campos de delivery se aplicável
+      if (flags.e2eFlows && (serviceType === 'delivery_bike' || serviceType === 'delivery_car')) {
+        rideData.package_description = packageDescription.trim();
+        rideData.delivery_notes = deliveryNotes.trim();
+        if (recipientName.trim()) rideData.recipient_name = recipientName.trim();
+        if (recipientPhone.trim()) rideData.recipient_phone = recipientPhone.trim();
+      }
+      
+      const { error } = await supabase.from('rides').insert(rideData);
 
       if (error) throw error;
 
       const message = rideType === 'negotiated' 
         ? 'Sua oferta foi enviada aos motoristas!' 
-        : 'Corrida solicitada com sucesso!';
+        : (serviceType === 'delivery_bike' || serviceType === 'delivery_car') 
+          ? 'Entrega solicitada com sucesso!'
+          : 'Corrida solicitada com sucesso!';
       toast.success(message);
       
       setOriginAddress('');
@@ -351,6 +393,10 @@ export const RideRequest = ({ currentLocation, onDestinationUpdate, onOriginUpda
       setUsingCurrentLocation(false);
       setPaymentMethod('');
       setNegotiatedPrice(null);
+      setPackageDescription('');
+      setDeliveryNotes('');
+      setRecipientName('');
+      setRecipientPhone('');
       
       // Clear map coordinates
       if (onOriginUpdate) onOriginUpdate(null);
