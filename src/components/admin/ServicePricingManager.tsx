@@ -1,43 +1,70 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useServicePricing } from '@/hooks/useServicePricing';
 import { ServicePricingEditModal } from './ServicePricingEditModal';
 import type { PricingSettings } from '@/hooks/usePricingSettings';
-import type { ServiceType } from '@/types';
-import { Bike, Car, Package, Truck } from 'lucide-react';
-
-const SERVICE_TYPE_CONFIG: Record<
-  ServiceType,
-  { label: string; icon: typeof Bike; color: string }
-> = {
-  moto_taxi: { label: 'Moto Táxi', icon: Bike, color: 'text-blue-600' },
-  passenger_car: { label: 'Carro Passageiro', icon: Car, color: 'text-green-600' },
-  delivery_bike: { label: 'Moto Flash', icon: Package, color: 'text-orange-600' },
-  delivery_car: { label: 'Car Flash', icon: Truck, color: 'text-purple-600' },
-};
+import { SERVICE_METADATA } from '@/lib/serviceMetadata';
+import { logTelemetry } from '@/lib/telemetry';
 
 export const ServicePricingManager = () => {
   const { allSettings, loading, updateSettings } = useServicePricing();
   const [editingSettings, setEditingSettings] = useState<PricingSettings | null>(null);
 
+  useEffect(() => {
+    if (!loading && allSettings.length > 0) {
+      allSettings.forEach((settings) => {
+        logTelemetry({
+          event: 'pricing_viewed',
+          data: { service_type: settings.service_type },
+        });
+      });
+    }
+  }, [loading, allSettings]);
+
   if (loading) {
-    return <div className="text-center py-8">Carregando preços...</div>;
+    return (
+      <div className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-2">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i}>
+              <CardHeader>
+                <Skeleton className="h-6 w-32" />
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-10 w-full" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (allSettings.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-muted-foreground">Nenhuma configuração de preço encontrada.</p>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
         {allSettings.map((settings) => {
-          const config = SERVICE_TYPE_CONFIG[settings.service_type];
-          const Icon = config.icon;
+          const metadata = SERVICE_METADATA[settings.service_type];
+          const Icon = metadata.icon;
 
           return (
             <Card key={settings.service_type}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Icon className={`h-5 w-5 ${config.color}`} />
-                  {config.label}
+                  <Icon className={`h-5 w-5 ${metadata.color}`} />
+                  {metadata.label}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">

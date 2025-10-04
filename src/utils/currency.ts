@@ -80,3 +80,10 @@ export const centsToReais = (cents: number): number => {
 export const reaisToCents = (reais: number): number => {
   return Math.round(reais * 100);
 };
+
+/**
+ * Formata valor em reais para string BRL (ex: 14.70 -> "R$ 14,70")
+ */
+export const formatCurrency = (reais: number): string => {
+  return fmtBRL.format(reais);
+};

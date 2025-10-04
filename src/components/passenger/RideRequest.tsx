@@ -50,6 +50,13 @@ export const RideRequest = ({ currentLocation, onDestinationUpdate, onOriginUpda
   const [paymentMethod, setPaymentMethod] = useState<string>('');
   const [showNegotiationOffer, setShowNegotiationOffer] = useState(false);
   const [negotiatedPrice, setNegotiatedPrice] = useState<number | null>(null);
+  const [estimatedPrices, setEstimatedPrices] = useState<Record<ServiceType, number | null>>({
+    moto_taxi: null,
+    passenger_car: null,
+    delivery_bike: null,
+    delivery_car: null,
+  });
+  const [loadingPrices, setLoadingPrices] = useState(false);
 
   // Set current location address when available and user chooses to use it
   useEffect(() => {
@@ -399,9 +406,14 @@ export const RideRequest = ({ currentLocation, onDestinationUpdate, onOriginUpda
         />
 
         {/* Service Type Selector */}
-        {flags.serviceTypeSelection && (
-          <ServiceTypeSelector value={serviceType} onChange={setServiceType} />
-        )}
+            {flags.serviceTypeSelection && (
+              <ServiceTypeSelector 
+                value={serviceType} 
+                onChange={setServiceType}
+                estimatedPrices={estimatedPrices}
+                loading={loadingPrices}
+              />
+            )}
 
         {/* Route Calculation Loading */}
         {calculatingRoute && (
@@ -549,9 +561,14 @@ export const RideRequest = ({ currentLocation, onDestinationUpdate, onOriginUpda
         </div>
 
         {/* Service Type Selector */}
-        {flags.serviceTypeSelection && (
-          <ServiceTypeSelector value={serviceType} onChange={setServiceType} />
-        )}
+          {flags.serviceTypeSelection && (
+            <ServiceTypeSelector 
+              value={serviceType} 
+              onChange={setServiceType}
+              estimatedPrices={estimatedPrices}
+              loading={loadingPrices}
+            />
+          )}
 
         {calculatingRoute && (
           <div className="flex items-center justify-center py-4">

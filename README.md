@@ -18,6 +18,14 @@ Sistema completo de corridas com suporte a múltiplos tipos de serviço.
 - Feature flags para rollout controlado
 - Integração completa com fluxo de criação de corridas
 
+#### ✅ Etapa 3 - UX/Ícones, Estabilidade e Polimento
+- Metadados centralizados de tipos de serviço (ícones, cores, labels)
+- Acessibilidade completa (navegação por teclado, aria-labels)
+- Preços estimados exibidos no seletor de tipos
+- Validações robustas no painel admin
+- Sistema de telemetria/observabilidade
+- Guia de testes e QA detalhado
+
 ### Feature Flags
 
 Configure no arquivo `.env`:
@@ -55,6 +63,23 @@ VITE_ENABLE_DELIVERY_SERVICES=false
 - 🚗 **Carro Passageiro** (`passenger_car`) - Transporte de passageiros em carro
 - 📦 **Moto Flash** (`delivery_bike`) - Entrega rápida em motocicleta
 - 🚚 **Car Flash** (`delivery_car`) - Entrega em carro
+
+### Telemetria e Observabilidade
+
+O sistema registra eventos importantes para análise:
+
+- **`service_type_selected`**: Quando o usuário seleciona um tipo de serviço
+  - Data: `{ service_type, context }`
+- **`pricing_viewed`**: Quando preços são visualizados no admin
+  - Data: `{ service_type }`
+- **`admin_pricing_updated`**: Quando preços são atualizados no admin
+  - Data: `{ service_type, fields[] }`
+
+Eventos são logados via `console.info` com prefixo `[Telemetry]`. Integração com providers externos (Posthog, Mixpanel) pode ser adicionada no futuro.
+
+### Testes
+
+Consulte o [Guia de Testes](./docs/testing-guide.md) para checklist completo de QA e instruções de teste.
 
 ---
 
