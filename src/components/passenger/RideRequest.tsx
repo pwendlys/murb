@@ -20,6 +20,9 @@ import {
 import { usePricingSettings, computePriceFromSettings } from '@/hooks/usePricingSettings';
 import { MotoNegociaOffer } from './MotoNegociaOffer';
 import { centsToReais } from '@/utils/currency';
+import { ServiceTypeSelector } from './ServiceTypeSelector';
+import { useFeatureFlags } from '@/hooks/useFeatureFlags';
+import type { ServiceType } from '@/types';
 
 export type RideType = 'normal' | 'negotiated';
 
@@ -33,7 +36,9 @@ interface RideRequestProps {
 
 export const RideRequest = ({ currentLocation, onDestinationUpdate, onOriginUpdate, variant = "card", rideType = "normal" }: RideRequestProps) => {
   const { user } = useAuth();
-  const { settings } = usePricingSettings();
+  const flags = useFeatureFlags();
+  const [serviceType, setServiceType] = useState<ServiceType>('moto_taxi');
+  const { settings } = usePricingSettings(serviceType);
   const [originAddress, setOriginAddress] = useState('');
   const [originPlaceId, setOriginPlaceId] = useState<string | null>(null);
   const [destination, setDestination] = useState('');
@@ -320,7 +325,8 @@ export const RideRequest = ({ currentLocation, onDestinationUpdate, onOriginUpda
         estimated_distance: parseFloat(rideDetails.distance),
         estimated_price: finalPrice,
         status: 'pending',
-        payment_method: paymentMethod
+        payment_method: paymentMethod,
+        service_type: serviceType
       });
 
       if (error) throw error;
@@ -391,6 +397,11 @@ export const RideRequest = ({ currentLocation, onDestinationUpdate, onOriginUpda
           placeholder="Para onde..."
           className="h-10 bg-background/90 backdrop-blur border-border/50"
         />
+
+        {/* Service Type Selector */}
+        {flags.serviceTypeSelection && (
+          <ServiceTypeSelector value={serviceType} onChange={setServiceType} />
+        )}
 
         {/* Route Calculation Loading */}
         {calculatingRoute && (
@@ -536,6 +547,11 @@ export const RideRequest = ({ currentLocation, onDestinationUpdate, onOriginUpda
             className="h-12"
           />
         </div>
+
+        {/* Service Type Selector */}
+        {flags.serviceTypeSelection && (
+          <ServiceTypeSelector value={serviceType} onChange={setServiceType} />
+        )}
 
         {calculatingRoute && (
           <div className="flex items-center justify-center py-4">

@@ -13,10 +13,13 @@ import RideHistory from '@/components/admin/RideHistory';
 import EarningsHistory from '@/components/admin/EarningsHistory';
 import { SubscriptionDashboard } from '@/components/admin/SubscriptionDashboard';
 import { SubscriptionManagement } from '@/components/admin/SubscriptionManagement';
+import { ServicePricingManager } from '@/components/admin/ServicePricingManager';
+import { useFeatureFlags } from '@/hooks/useFeatureFlags';
 
 const Admin = () => {
   const { profile, loading, signOut } = useAuth();
   const navigate = useNavigate();
+  const flags = useFeatureFlags();
 
   useEffect(() => {
     if (!loading) {
@@ -66,8 +69,11 @@ const Admin = () => {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="settings">
-            <TabsList className="grid grid-cols-6 w-full">
+            <TabsList className={`grid w-full ${flags.adminServicePricing ? 'grid-cols-7' : 'grid-cols-6'}`}>
               <TabsTrigger value="settings">Configurações de Preço</TabsTrigger>
+              {flags.adminServicePricing && (
+                <TabsTrigger value="service-pricing">Preços por Serviço</TabsTrigger>
+              )}
               <TabsTrigger value="users">Usuários</TabsTrigger>
               <TabsTrigger value="rides">Histórico de Corridas</TabsTrigger>
               <TabsTrigger value="earnings">Histórico de Ganhos</TabsTrigger>
@@ -78,6 +84,12 @@ const Admin = () => {
             <TabsContent value="settings" className="pt-4">
               <PricingSettingsForm />
             </TabsContent>
+
+            {flags.adminServicePricing && (
+              <TabsContent value="service-pricing" className="pt-4">
+                <ServicePricingManager />
+              </TabsContent>
+            )}
 
             <TabsContent value="users" className="pt-4">
               <UserManagement />

@@ -1,5 +1,63 @@
 # Welcome to your Lovable project
 
+## Sistema de Corridas - Mototáxi e Entregas
+
+Sistema completo de corridas com suporte a múltiplos tipos de serviço.
+
+### Etapas de Implementação
+
+#### ✅ Etapa 1 - Fundação de Tipos de Serviço
+- Enum `service_type` criado: `moto_taxi`, `passenger_car`, `delivery_bike`, `delivery_car`
+- Campos `service_type` adicionados em `rides` e `pricing_settings`
+- Tipos TypeScript atualizados
+- Hook `usePricingSettings` parametrizado por tipo de serviço
+
+#### ✅ Etapa 2 - Admin de Preços por Serviço + UI de Seleção
+- Painel administrativo para gerenciar preços por tipo de serviço
+- UI de seleção de tipo de serviço no app do passageiro
+- Feature flags para rollout controlado
+- Integração completa com fluxo de criação de corridas
+
+### Feature Flags
+
+Configure no arquivo `.env`:
+
+```env
+# Habilitar painel admin de preços por serviço
+VITE_ENABLE_ADMIN_SERVICE_PRICING=false
+
+# Habilitar seleção de tipo de serviço no app
+VITE_ENABLE_SERVICE_TYPE_SELECTION=false
+
+# Habilitar tipo "Carro Passageiro"
+VITE_ENABLE_PASSENGER_CAR=false
+
+# Habilitar tipos de entrega (Moto Flash, Car Flash)
+VITE_ENABLE_DELIVERY_SERVICES=false
+```
+
+### Rollout Recomendado
+
+**Fase 1 - Admin Only (Staging):**
+- `VITE_ENABLE_ADMIN_SERVICE_PRICING=true`
+- Demais flags `false`
+
+**Fase 2 - Beta com Carro Passageiro:**
+- `VITE_ENABLE_SERVICE_TYPE_SELECTION=true`
+- `VITE_ENABLE_PASSENGER_CAR=true`
+
+**Fase 3 - Full com Entregas:**
+- `VITE_ENABLE_DELIVERY_SERVICES=true`
+
+### Tipos de Serviço
+
+- 🏍️ **Moto Táxi** (`moto_taxi`) - Transporte de passageiros em motocicleta
+- 🚗 **Carro Passageiro** (`passenger_car`) - Transporte de passageiros em carro
+- 📦 **Moto Flash** (`delivery_bike`) - Entrega rápida em motocicleta
+- 🚚 **Car Flash** (`delivery_car`) - Entrega em carro
+
+---
+
 ## Project info
 
 **URL**: https://lovable.dev/projects/cf358664-f018-49cd-a5c5-a1e16f3ffc32

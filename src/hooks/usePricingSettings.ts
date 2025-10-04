@@ -38,17 +38,16 @@ export const computePriceFromSettings = (settings: PricingSettings, distanceKm: 
   return Math.max(0, Math.round(base * 100) / 100);
 };
 
-export const usePricingSettings = () => {
+export const usePricingSettings = (serviceType: ServiceType = 'moto_taxi') => {
   const { user } = useAuth();
   const [settings, setSettings] = useState<PricingSettings | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchSettings = async () => {
-    // Busca config para moto_taxi por padrão (backward compatibility)
     const { data, error } = await supabase
       .from('pricing_settings')
       .select('*')
-      .eq('service_type', 'moto_taxi')
+      .eq('service_type', serviceType)
       .order('created_at', { ascending: false })
       .limit(1);
 
@@ -80,7 +79,7 @@ export const usePricingSettings = () => {
     fetchSettings();
 
     const channel = supabase
-      .channel('pricing-settings-realtime')
+      .channel(`pricing-settings-${serviceType}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'pricing_settings' },
@@ -93,11 +92,10 @@ export const usePricingSettings = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [serviceType]);
 
   const saveSettings = async (patch: Partial<PricingSettings>) => {
     if (!user) throw new Error('Not authenticated');
-    const serviceType = patch.service_type || settings?.service_type || 'moto_taxi';
     
     // If exists, update; else insert
     if (settings?.id) {
